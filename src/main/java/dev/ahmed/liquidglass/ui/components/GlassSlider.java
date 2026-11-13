@@ -48,31 +48,35 @@ public final class GlassSlider {
         float fill = fillAnim.update(dt);
         float hv = hoverAnim.update(dt);
 
-        UIRenderer.drawRoundedRect(ctx, x, y, w, h, t.radiusSmall(), UIRenderer.lerpColor(t.bgGlassWeak(), t.bgGlass(), hv));
-        UIRenderer.drawRoundedBorder(ctx, x, y, w, h, t.radiusSmall(), 1.0f,
+        UIRenderer.drawRoundedRect(ctx, x, y, w, h, 7.5f, UIRenderer.lerpColor(t.bgGlassWeak(), t.bgGlass(), hv));
+        UIRenderer.drawRoundedBorder(ctx, x, y, w, h, 7.5f, 1.0f,
             UIRenderer.lerpColor(t.borderBase(), t.borderActive(), hv * 0.7f));
 
-        // Label & formatted numeric readout
-        UIRenderer.drawText(ctx, label, x + 8, y + 4, t.textSecondary(), 1.0f, false, false);
+        UIRenderer.drawText(ctx, label, x + 9.0f, y + 4.0f, t.textSecondary(), 1.0f, false, false);
         String formatted = (step >= 1.0 ? String.valueOf(Math.round(currentVal)) : String.format(Locale.ROOT, "%.1f", currentVal)) + suffix;
         int valW = MinecraftClient.getInstance().textRenderer.getWidth(formatted);
-        UIRenderer.drawText(ctx, formatted, x + w - valW - 8, y + 4, t.textPrimary(), 1.0f, false, false);
+        UIRenderer.drawText(ctx, formatted, x + w - valW - 9.0f, y + 4.0f, t.textPrimary(), 1.0f, false, false);
 
-        // Track + active bar + rounded thumb
-        float trackX = x + 8;
-        float trackY = y + h - 7;
-        float trackW = w - 16;
-        UIRenderer.drawRoundedRect(ctx, trackX, trackY, trackW, 3, 1.5f, 0xFF181B24);
-        UIRenderer.drawRoundedRect(ctx, trackX, trackY, Math.max(3.0f, trackW * fill), 3, 1.5f, t.accentPrimary());
+        float trackX = x + 9.0f;
+        float trackY = y + h - 7.0f;
+        float trackW = w - 18.0f;
+        UIRenderer.drawRoundedRect(ctx, trackX, trackY, trackW, 3.5f, 1.75f, 0xFF151821);
+        UIRenderer.drawRoundedRect(ctx, trackX, trackY, Math.max(3.5f, trackW * fill), 3.5f, 1.75f, t.accentPrimary());
 
-        float thumbX = trackX + trackW * fill - 3.5f;
-        UIRenderer.drawRoundedRect(ctx, thumbX, trackY - 2.0f, 7.0f, 7.0f, 3.5f, t.accentActive());
+        float thumbSize = 7.5f + hv * 1.0f;
+        float thumbX = trackX + trackW * fill - thumbSize * 0.5f;
+        float thumbY = trackY + 1.75f - thumbSize * 0.5f;
+        if (hv > 0.05f) {
+            UIRenderer.drawRoundedRect(ctx, thumbX - 1.5f, thumbY - 1.5f, thumbSize + 3.0f, thumbSize + 3.0f, (thumbSize + 3.0f) * 0.5f,
+                UIRenderer.withAlpha(t.accentActive(), (int) (70 * hv)));
+        }
+        UIRenderer.drawRoundedRect(ctx, thumbX, thumbY, thumbSize, thumbSize, thumbSize * 0.5f, t.accentActive());
     }
 
     public boolean mouseClicked(double mouseX, double mouseY, int button, float x, float y, float w, float h) {
         if (button == 0 && mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + h) {
             dragging = true;
-            updateFromMouse(mouseX, x + 8, w - 16);
+            updateFromMouse(mouseX, x + 9.0f, w - 18.0f);
             return true;
         }
         return false;
@@ -80,7 +84,7 @@ public final class GlassSlider {
 
     public boolean mouseDragged(double mouseX, float x, float w) {
         if (dragging) {
-            updateFromMouse(mouseX, x + 8, w - 16);
+            updateFromMouse(mouseX, x + 9.0f, w - 18.0f);
             return true;
         }
         return false;

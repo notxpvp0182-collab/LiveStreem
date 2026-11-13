@@ -70,19 +70,19 @@ tasks.named("processResources") {
         g.dispose()
         ImageIO.write(img, "PNG", iconFile)
 
-        // 2. Pre-bake HarfBuzz-shaped Bengali Akshar Atlas from HindSiliguri-SemiBold.ttf
+        // 2. Pre-bake Full HD HarfBuzz-shaped Bengali Akshar Atlas from HindSiliguri-SemiBold.ttf
         File ttfFile = file("src/main/resources/assets/liquidglass/font/bengali.ttf")
         File atlasFile = file("src/main/resources/assets/liquidglass/font/bengali_atlas.dat")
         if (ttfFile.exists()) {
-            Font bnFont = Font.createFont(Font.TRUETYPE_FONT, ttfFile).deriveFont(Font.BOLD, 16.0f)
-            Set<String> akshars = new LinkedHashSet<>()
+            Font bnFont = Font.createFont(Font.TRUETYPE_FONT, ttfFile).deriveFont(Font.BOLD, 28.0f)
+            java.util.Set<String> akshars = new java.util.LinkedHashSet<>()
 
             String[] vowelsAndDigits = [
                 "অ","আ","ই","ঈ","উ","ঊ","ঋ","এ","ঐ","ও","ঔ",
                 "০","১","২","৩","৪","৫","৬","৭","৮","৯","।",
                 "া","ি","ী","ু","ূ","ৃ","ে","ৈ","ো","ৌ","ং","ঃ","ঁ","্","ৎ"
             ]
-            akshars.addAll(Arrays.asList(vowelsAndDigits))
+            akshars.addAll(java.util.Arrays.asList(vowelsAndDigits))
 
             String[] consonants = [
                 "ক","খ","গ","ঘ","ঙ","চ","ছ","জ","ঝ","ঞ",
@@ -122,9 +122,10 @@ tasks.named("processResources") {
                 }
             }
 
-            BufferedImage canvas = new BufferedImage(64, 24, BufferedImage.TYPE_INT_ARGB)
+            BufferedImage canvas = new BufferedImage(112, 42, BufferedImage.TYPE_INT_ARGB)
             Graphics2D cg = canvas.createGraphics()
             cg.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
+            cg.setRenderingHint(RenderingHints.KEY_FRACTIONALMETRICS, RenderingHints.VALUE_FRACTIONALMETRICS_ON)
             cg.setFont(bnFont)
             FontMetrics fm = cg.getFontMetrics()
 
@@ -133,30 +134,30 @@ tasks.named("processResources") {
                 out.writeInt(akshars.size())
                 for (String ak : akshars) {
                     cg.setComposite(AlphaComposite.Clear)
-                    cg.fillRect(0, 0, 64, 24)
+                    cg.fillRect(0, 0, 112, 42)
                     cg.setComposite(AlphaComposite.SrcOver)
                     cg.setColor(Color.WHITE)
-                    cg.drawString(ak, 2, 16)
+                    cg.drawString(ak, 4, 29)
 
-                    int adv = Math.max(2, fm.stringWidth(ak))
-                    List<Integer> spans = new ArrayList<>()
-                    for (int y = 0; y < 22; y++) {
+                    int adv = Math.max(4, fm.stringWidth(ak))
+                    java.util.List<Integer> spans = new java.util.ArrayList<>()
+                    for (int y = 0; y < 40; y++) {
                         int x = 0
-                        while (x < 60) {
+                        while (x < 108) {
                             int a = (canvas.getRGB(x, y) >>> 24) & 0xFF
-                            if (a >= 75) {
+                            if (a >= 45) {
                                 int xStart = x
                                 int sumA = a
                                 int cnt = 1
                                 x++
-                                while (x < 60) {
+                                while (x < 108) {
                                     int na = (canvas.getRGB(x, y) >>> 24) & 0xFF
-                                    if (na < 75) break
+                                    if (na < 45 || Math.abs(na - (sumA / cnt)) > 65) break
                                     sumA += na
                                     cnt++
                                     x++
                                 }
-                                int avgA = Math.min(255, (int) ((sumA / cnt) * 1.15f))
+                                int avgA = Math.min(255, (int) ((sumA / cnt) * 1.12f))
                                 int packed = ((y & 0xFF) << 24) | ((xStart & 0xFF) << 16) | ((x & 0xFF) << 8) | (avgA & 0xFF)
                                 spans.add(packed)
                             } else {

@@ -1,7 +1,5 @@
 package dev.ahmed.liquidglass.ui.render;
 
-import dev.ahmed.liquidglass.ui.font.SmallCapsRenderer;
-import dev.ahmed.liquidglass.ui.font.WorldLanguageShaper;
 import dev.ahmed.liquidglass.ui.theme.GlassQuality;
 import dev.ahmed.liquidglass.ui.theme.ThemeManager;
 import dev.ahmed.liquidglass.ui.theme.ThemeTokens;
@@ -10,18 +8,26 @@ import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.gui.DrawContext;
 import org.joml.Matrix3x2fStack;
 
+/**
+ * 4x Super-Sampled (0.25f physical pixel resolution) UI Renderer with pre-computed
+ * sub-pixel anti-aliased edge feathering so corners, borders, and pills have zero pixelation.
+ */
 public final class UIRenderer {
-    // Pre-computed circle arc table for radii up to 36 half-pixels (zero runtime Math.sqrt overhead)
-    private static final int MAX_R = 36;
-    private static final int[][] ARC_INSET = new int[MAX_R + 1][];
+    private static final int MAX_R = 64;
+    private static final int[][] ARC_SOLID_INSET = new int[MAX_R + 1][];
+    private static final int[][] ARC_AA_ALPHA = new int[MAX_R + 1][];
 
     static {
         for (int r = 1; r <= MAX_R; r++) {
-            ARC_INSET[r] = new int[r];
+            ARC_SOLID_INSET[r] = new int[r];
+            ARC_AA_ALPHA[r] = new int[r];
             for (int dy = 0; dy < r; dy++) {
                 double py = r - dy - 0.5;
-                int dx = (int) Math.round(Math.sqrt(Math.max(0.0, r * r - py * py)));
-                ARC_INSET[r][dy] = Math.max(0, r - dx);
+                double dxExact = Math.sqrt(Math.max(0.0, r * r - py * py));
+                int dxInt = (int) Math.floor(dxExact);
+                double frac = dxExact - dxInt;
+                ARC_SOLID_INSET[r][dy] = Math.max(0, r - dxInt);
+                ARC_AA_ALPHA[r][dy] = (int) Math.round(frac * 255.0);
             }
         }
     }
@@ -40,19 +46,22 @@ public final class UIRenderer {
         ThemeTokens t = ThemeManager.get().tokens();
         GlassQuality q = ThemeManager.get().quality();
 
-        float smoothRadius = Math.max(radius, 7.0f);
+        float smoothRadius = Math.max(radius, 7.5f);
 
         if (q.shadowEnabled() && ((surfaceColor >>> 24) & 0xFF) > 10) {
-            drawShadow(ctx, x, y + 2.0f, w, h, smoothRadius, 4.0f, t.shadowColor());
+            drawShadow(ctx, x, y + 2.0f, w, h, smoothRadius, 5.0f, t.shadowColor());
         }
 
+        // Main frosted glass body
         drawRoundedRect(ctx, x, y, w, h, smoothRadius, surfaceColor);
 
-        if (q.innerHighlightEnabled() && hoverProgress > 0.01f) {
-            int hoverTint = withAlpha(t.accentPrimary(), (int) (18 * hoverProgress));
-            drawRoundedRect(ctx, x + 1.0f, y + 1.0f, w - 2.0f, h - 2.0f, Math.max(2.0f, smoothRadius - 1.0f), hoverTint);
+        // Subtle top-half liquid sheen
+        if (q.innerHighlightEnabled() && h > 16.0f) {
+            int topSheen = withAlpha(0xFFFFFFFF, (int) (10 + 14 * hoverProgress));
+            drawRoundedRect(ctx, x + 1.0f, y + 0.75f, w - 2.0f, Math.min(h * 0.42f, 18.0f), Math.max(2.0f, smoothRadius - 1.0f), topSheen);
         }
 
+        // Crisp 4x Full HD anti-aliased border
         if (((borderColor >>> 24) & 0xFF) > 2) {
             int effectiveBorder = lerpColor(borderColor, t.borderActive(), hoverProgress);
             drawRoundedBorder(ctx, x, y, w, h, smoothRadius, 1.0f, effectiveBorder);
@@ -63,27 +72,23 @@ public final class UIRenderer {
         int baseAlpha = (shadowColor >>> 24) & 0xFF;
         if (baseAlpha <= 4) return;
         int rgb = shadowColor & 0x00FFFFFF;
-        int c1 = (Math.max(4, baseAlpha / 4) << 24) | rgb;
-        int c2 = (Math.max(2, baseAlpha / 8) << 24) | rgb;
-        drawRoundedRect(ctx, x - 1.5f, y - 0.5f, w + 3.0f, h + 2.5f, radius + 1.5f, c1);
-        drawRoundedRect(ctx, x - 3.0f, y - 1.0f, w + 6.0f, h + 4.5f, radius + 3.0f, c2);
+        drawRoundedRect(ctx, x - 1.25f, y - 0.5f, w + 2.5f, h + 2.25f, radius + 1.25f, (Math.max(4, baseAlpha / 4) << 24) | rgb);
+        drawRoundedRect(ctx, x - 2.75f, y - 1.0f, w + 5.5f, h + 4.25f, radius + 2.75f, (Math.max(2, baseAlpha / 8) << 24) | rgb);
     }
 
-    /**
-     * Renders at 0.5f sub-pixel scale using pre-computed circular arcs so corners are
-     * genuinely round and non-pixelated while keeping high FPS.
-     */
     public static void drawRoundedRect(DrawContext ctx, float x, float y, float w, float h, float radius, int color) {
-        if (((color >>> 24) & 0xFF) <= 1 || w <= 0 || h <= 0) return;
+        int baseAlpha = (color >>> 24) & 0xFF;
+        if (baseAlpha <= 1 || w <= 0 || h <= 0) return;
+        int rgb = color & 0x00FFFFFF;
 
         Matrix3x2fStack m = ctx.getMatrices();
         m.pushMatrix();
         m.translate(x, y);
-        m.scale(0.5f, 0.5f);
+        m.scale(0.25f, 0.25f); // 4x Full HD physical screen pixel coordinate space
 
-        int iw = Math.round(w * 2.0f);
-        int ih = Math.round(h * 2.0f);
-        int r = Math.min(MAX_R, Math.min(Math.round(radius * 2.0f), Math.min(iw, ih) / 2));
+        int iw = Math.round(w * 4.0f);
+        int ih = Math.round(h * 4.0f);
+        int r = Math.min(MAX_R, Math.min(Math.round(radius * 4.0f), Math.min(iw, ih) / 2));
 
         if (r <= 1) {
             ctx.fill(0, 0, iw, ih, color);
@@ -91,12 +96,27 @@ public final class UIRenderer {
             return;
         }
 
-        int[] insets = ARC_INSET[r];
+        int[] insets = ARC_SOLID_INSET[r];
+        int[] aaAlphas = ARC_AA_ALPHA[r];
+
         for (int dy = 0; dy < r; dy++) {
             int in = insets[dy];
+            int botY = ih - 1 - dy;
             if (iw - in > in) {
                 ctx.fill(in, dy, iw - in, dy + 1, color);
-                ctx.fill(in, ih - 1 - dy, iw - in, ih - dy, color);
+                if (botY != dy) {
+                    ctx.fill(in, botY, iw - in, botY + 1, color);
+                }
+            }
+            int aa = (baseAlpha * aaAlphas[dy]) >> 8;
+            if (aa > 6 && in > 0) {
+                int aaCol = (aa << 24) | rgb;
+                ctx.fill(in - 1, dy, in, dy + 1, aaCol);
+                ctx.fill(iw - in, dy, iw - in + 1, dy + 1, aaCol);
+                if (botY != dy) {
+                    ctx.fill(in - 1, botY, in, botY + 1, aaCol);
+                    ctx.fill(iw - in, botY, iw - in + 1, botY + 1, aaCol);
+                }
             }
         }
         if (ih - r > r) {
@@ -106,43 +126,55 @@ public final class UIRenderer {
     }
 
     public static void drawRoundedBorder(DrawContext ctx, float x, float y, float w, float h, float radius, float thickness, int color) {
-        if (((color >>> 24) & 0xFF) <= 2 || w <= 2 || h <= 2) return;
+        int baseAlpha = (color >>> 24) & 0xFF;
+        if (baseAlpha <= 2 || w <= 2 || h <= 2) return;
 
         Matrix3x2fStack m = ctx.getMatrices();
         m.pushMatrix();
         m.translate(x, y);
-        m.scale(0.5f, 0.5f);
+        m.scale(0.25f, 0.25f); // 4x Full HD resolution
 
-        int iw = Math.round(w * 2.0f);
-        int ih = Math.round(h * 2.0f);
-        int r = Math.min(MAX_R, Math.min(Math.round(radius * 2.0f), Math.min(iw, ih) / 2));
+        int iw = Math.round(w * 4.0f);
+        int ih = Math.round(h * 4.0f);
+        int r = Math.min(MAX_R, Math.min(Math.round(radius * 4.0f), Math.min(iw, ih) / 2));
+        int t = Math.max(3, Math.round(thickness * 3.0f));
 
-        if (r <= 1) {
-            ctx.fill(0, 0, iw, 2, color);
-            ctx.fill(0, ih - 2, iw, ih, color);
-            ctx.fill(0, 2, 2, ih - 2, color);
-            ctx.fill(iw - 2, 2, iw, ih - 2, color);
+        if (r <= 2) {
+            ctx.fill(0, 0, iw, t, color);
+            ctx.fill(0, ih - t, iw, ih, color);
+            ctx.fill(0, t, t, ih - t, color);
+            ctx.fill(iw - t, t, iw, ih - t, color);
             m.popMatrix();
             return;
         }
 
-        int[] insets = ARC_INSET[r];
-        // Top and bottom straight border segments
-        ctx.fill(r, 0, iw - r, 2, color);
-        ctx.fill(r, ih - 2, iw - r, ih, color);
-        // Left and right straight border segments
-        ctx.fill(0, r, 2, ih - r, color);
-        ctx.fill(iw - 2, r, iw, ih - r, color);
+        int[] outerInsets = ARC_SOLID_INSET[r];
+        int innerR = Math.max(1, r - t);
+        int[] innerInsets = ARC_SOLID_INSET[innerR];
 
-        // Smooth 2-subpixel corner arc strokes
+        // Top and bottom straight border bars
+        for (int dy = 0; dy < t; dy++) {
+            int in = outerInsets[Math.min(dy, r - 1)];
+            ctx.fill(r, dy, iw - r, dy + 1, color);
+            ctx.fill(r, ih - 1 - dy, iw - r, ih - dy, color);
+        }
+        // Left and right straight border bars
+        ctx.fill(0, r, t, ih - r, color);
+        ctx.fill(iw - t, r, iw, ih - r, color);
+
+        // Smooth ring arc between outer radius r and inner radius (r - t)
         for (int dy = 0; dy < r; dy++) {
-            int in = insets[dy];
-            int nextIn = (dy + 1 < r) ? insets[dy + 1] : 0;
-            int strokeW = Math.max(2, in - nextIn + 1);
-            ctx.fill(in, dy, in + strokeW, dy + 1, color);
-            ctx.fill(iw - in - strokeW, dy, iw - in, dy + 1, color);
-            ctx.fill(in, ih - 1 - dy, in + strokeW, ih - dy, color);
-            ctx.fill(iw - in - strokeW, ih - 1 - dy, iw - in, ih - dy, color);
+            int outIn = outerInsets[dy];
+            int inIn = (dy < t) ? r : (t + innerInsets[Math.min(innerR - 1, dy - t)]);
+            int strokeEnd = Math.max(outIn + t, inIn);
+            int botY = ih - 1 - dy;
+
+            ctx.fill(outIn, dy, strokeEnd, dy + 1, color);
+            ctx.fill(iw - strokeEnd, dy, iw - outIn, dy + 1, color);
+            if (botY != dy) {
+                ctx.fill(outIn, botY, strokeEnd, botY + 1, color);
+                ctx.fill(iw - strokeEnd, botY, iw - outIn, botY + 1, color);
+            }
         }
 
         m.popMatrix();

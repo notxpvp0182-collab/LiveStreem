@@ -1,6 +1,5 @@
 package dev.ahmed.liquidglass.ui.font;
 
-import dev.ahmed.liquidglass.ui.render.UIRenderer;
 import net.minecraft.client.gui.DrawContext;
 import org.joml.Matrix3x2fStack;
 
@@ -12,12 +11,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Dedicated Bengali (বাংলা) Akshar & Conjunct rendering engine.
- * Uses the HarfBuzz-shaped HindSiliguri-SemiBold glyph atlas so words like
- * 'আমি', 'বাংলাদেশ', 'চট্টগ্রাম', 'আন্তর্জাতিক', 'মুসলিম', 'জিন্দাবাদ' render cleanly.
- */
 public final class BengaliFontEngine {
+    private static final float HD_SCALE = 0.285f;
     public record AksharGlyph(int advanceSubPx, int[] spans) {}
 
     private static final Map<String, AksharGlyph> ATLAS = new HashMap<>(2048);
@@ -45,15 +40,6 @@ public final class BengaliFontEngine {
         } catch (Exception ignored) {}
     }
 
-    public static boolean containsBengali(String s) {
-        if (s == null || s.isEmpty()) return false;
-        for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
-            if (c >= '\u0980' && c <= '\u09FF') return true;
-        }
-        return false;
-    }
-
     public static boolean isBengaliChar(int cp) {
         return cp >= 0x0980 && cp <= 0x09FF;
     }
@@ -61,11 +47,11 @@ public final class BengaliFontEngine {
     public static String normalizeBengali(String raw) {
         if (raw == null || raw.isEmpty()) return "";
         return Normalizer.normalize(raw, Normalizer.Form.NFC)
-            .replace("\u09AF\u09BC", "\u09DF") // য + ় -> য়
-            .replace("\u09A1\u09BC", "\u09DC") // ড + ় -> ড়
-            .replace("\u09A2\u09BC", "\u09DD") // ঢ + ় -> ঢ়
-            .replace("\u09C7\u09BE", "\u09CB") // ে + া -> ো
-            .replace("\u09C7\u09D7", "\u09CC") // ে + ৗ -> ৌ
+            .replace("\u09AF\u09BC", "\u09DF")
+            .replace("\u09A1\u09BC", "\u09DC")
+            .replace("\u09A2\u09BC", "\u09DD")
+            .replace("\u09C7\u09BE", "\u09CB")
+            .replace("\u09C7\u09D7", "\u09CC")
             .replace("\u200C", "")
             .replace("\u200D", "");
     }
@@ -105,7 +91,7 @@ public final class BengaliFontEngine {
         for (AksharGlyph g : glyphs) {
             subPx += g.advanceSubPx();
         }
-        return Math.round(subPx * 0.5f);
+        return Math.round(subPx * HD_SCALE);
     }
 
     public static float drawBengaliSegment(DrawContext ctx, String bnSegment, float x, float y, int color, boolean shadow) {
@@ -114,12 +100,12 @@ public final class BengaliFontEngine {
 
         int baseAlpha = (color >>> 24) & 0xFF;
         int rgb = color & 0x00FFFFFF;
-        int shadowRgb = 0x101218;
+        int shadowRgb = 0x080A0F;
 
         Matrix3x2fStack m = ctx.getMatrices();
         m.pushMatrix();
-        m.translate(x, y - 1.5f);
-        m.scale(0.5f, 0.5f);
+        m.translate(x, y - 1.8f);
+        m.scale(HD_SCALE, HD_SCALE);
 
         int cursorSubX = 0;
         for (AksharGlyph g : glyphs) {
@@ -127,19 +113,19 @@ public final class BengaliFontEngine {
             if (shadow) {
                 for (int sp : spans) {
                     int sy = (sp >>> 24) & 0xFF;
-                    int x1 = ((sp >>> 16) & 0xFF) - 2;
-                    int x2 = ((sp >>> 8) & 0xFF) - 2;
+                    int x1 = ((sp >>> 16) & 0xFF) - 4;
+                    int x2 = ((sp >>> 8) & 0xFF) - 4;
                     int sa = (sp & 0xFF);
-                    int effA = (sa * baseAlpha) / 360;
-                    if (effA > 8) {
-                        ctx.fill(cursorSubX + x1 + 1, sy + 1, cursorSubX + x2 + 1, sy + 2, (effA << 24) | shadowRgb);
+                    int effA = (sa * baseAlpha) / 340;
+                    if (effA > 10) {
+                        ctx.fill(cursorSubX + x1 + 2, sy + 2, cursorSubX + x2 + 2, sy + 3, (effA << 24) | shadowRgb);
                     }
                 }
             }
             for (int sp : spans) {
                 int sy = (sp >>> 24) & 0xFF;
-                int x1 = ((sp >>> 16) & 0xFF) - 2;
-                int x2 = ((sp >>> 8) & 0xFF) - 2;
+                int x1 = ((sp >>> 16) & 0xFF) - 4;
+                int x2 = ((sp >>> 8) & 0xFF) - 4;
                 int sa = (sp & 0xFF);
                 int effA = (sa * baseAlpha) / 255;
                 if (effA > 8) {
@@ -150,6 +136,6 @@ public final class BengaliFontEngine {
         }
 
         m.popMatrix();
-        return cursorSubX * 0.5f;
+        return cursorSubX * HD_SCALE;
     }
 }
