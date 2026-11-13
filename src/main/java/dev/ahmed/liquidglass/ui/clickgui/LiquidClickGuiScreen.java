@@ -147,7 +147,6 @@ public final class LiquidClickGuiScreen extends Screen {
                 float targetCx = startX + slot * (cardW + gap) + (remIdx < 2 ? -105.0f : 105.0f);
                 cx = baseCx + (targetCx - baseCx) * expand;
             }
-            }
             boolean hovered = mouseX >= cx && mouseX <= cx + cardW && mouseY >= cardY && mouseY <= cardY + cardH;
             cardHoverAnims[i].animateTo(hovered ? 1.0f : 0.0f);
             float hv = cardHoverAnims[i].update(dt);
