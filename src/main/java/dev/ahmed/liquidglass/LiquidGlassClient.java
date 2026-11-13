@@ -33,7 +33,7 @@ public final class LiquidGlassClient implements ClientModInitializer {
         ConfigManager.get().load();
 
         ConfigManager cfg = ConfigManager.get();
-        if (cfg.autoConnect() && !cfg.youtubeUrl().isEmpty() && !cfg.youtubeApiKey().isEmpty()) {
+        if (cfg.autoConnect() && !cfg.youtubeUrl().isEmpty()) {
             StreamManager.get().connect(cfg.youtubeUrl(), cfg.youtubeApiKey());
         }
 

@@ -3,7 +3,6 @@ package dev.ahmed.liquidglass.youtube;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 import dev.ahmed.liquidglass.stream.ProviderException;
 import dev.ahmed.liquidglass.stream.ProviderException.Kind;
@@ -12,206 +11,459 @@ import dev.ahmed.liquidglass.stream.StreamManager.ChatMessage;
 
 import java.io.IOException;
 import java.net.URI;
-import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.function.Supplier;
+import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
- * Official YouTube Data API v3 implementation. The API key is user-supplied at runtime
- * (never bundled in the jar). Every call is blocking and must run off the render thread.
+ * Keyless, unlimited YouTube InnerTube provider.
+ * Fetches live metadata and live chat directly from YouTube's web endpoints without any API key.
  */
 public final class YouTubeDataApiProvider implements StreamDataProvider {
-    private static final String BASE = "https://www.googleapis.com/youtube/v3/";
-    private static final long DEFAULT_POLL_MS = 6_000L;
+    private static final String WATCH_URL = "https://www.youtube.com/watch?v=";
+    private static final String LIVE_CHAT_URL = "https://www.youtube.com/youtubei/v1/live_chat/get_live_chat?prettyPrint=false";
+    private static final String USER_AGENT =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+    private static final long DEFAULT_POLL_MS = 3_500L;
+    private static final Pattern NUMBER_PATTERN = Pattern.compile("([0-9]+(?:[.,][0-9]+)?)\\s*([KMBkmb])?");
 
     private final HttpClient http = HttpClient.newBuilder()
-        .connectTimeout(Duration.ofSeconds(8))
+        .connectTimeout(Duration.ofSeconds(10))
+        .followRedirects(HttpClient.Redirect.NORMAL)
         .build();
-    private final Supplier<String> apiKey;
 
-    public YouTubeDataApiProvider(Supplier<String> apiKey) {
-        this.apiKey = apiKey;
-    }
+    private volatile ChannelInfo cachedChannel;
+
+    public YouTubeDataApiProvider() {}
 
     @Override
     public VideoInfo fetchVideo(String videoId) throws ProviderException {
-        JsonObject root = get("videos", Map.of(
-            "part", "snippet,liveStreamingDetails,statistics",
-            "id", videoId));
-        JsonArray items = array(root, "items");
-        if (items == null || items.isEmpty()) {
-            throw new ProviderException(Kind.NOT_FOUND,
-                "Video not found. It may be private, deleted, or the link is wrong.");
-        }
-        JsonObject item = items.get(0).getAsJsonObject();
-        JsonObject snippet = obj(item, "snippet");
-        JsonObject live = obj(item, "liveStreamingDetails");
-        JsonObject stats = obj(item, "statistics");
+        String html = fetchWatchHtml(videoId);
 
-        String broadcast = str(snippet, "liveBroadcastContent");
-        long start = parseTime(str(live, "actualStartTime"));
-        String end = str(live, "actualEndTime");
+        JsonObject playerResp = extractJsonObject(html, "ytInitialPlayerResponse");
+        JsonObject initialData = extractJsonObject(html, "ytInitialData");
+
+        if (playerResp == null) {
+            throw new ProviderException(Kind.NOT_FOUND, "Unable to read YouTube stream page. Check the link.");
+        }
+
+        JsonObject videoDetails = obj(playerResp, "videoDetails");
+        if (videoDetails == null || videoDetails.isEmpty()) {
+            throw new ProviderException(Kind.NOT_FOUND, "Stream not found or unavailable.");
+        }
+
+        String title = str(videoDetails, "title");
+        String channelId = str(videoDetails, "channelId");
+        String author = str(videoDetails, "author");
+        boolean isLiveNow = bool(videoDetails, "isLive");
+        boolean isUpcoming = bool(videoDetails, "isUpcoming");
+        boolean isLiveContent = bool(videoDetails, "isLiveContent");
+
+        JsonObject micro = obj(obj(playerResp, "microformat"), "playerMicroformatRenderer");
+        JsonObject liveDetails = obj(micro, "liveBroadcastDetails");
+        if (liveDetails != null && bool(liveDetails, "isLiveNow")) {
+            isLiveNow = true;
+        }
+        long startMs = parseIsoTime(str(liveDetails, "startTimestamp"));
+        String endIso = str(liveDetails, "endTimestamp");
 
         LiveStatus status;
-        if ("live".equals(broadcast)) status = LiveStatus.LIVE;
-        else if ("upcoming".equals(broadcast)) status = LiveStatus.UPCOMING;
-        else if (end != null || start > 0L) status = LiveStatus.ENDED;
+        if (isLiveNow) status = LiveStatus.LIVE;
+        else if (isUpcoming) status = LiveStatus.UPCOMING;
+        else if (endIso != null || (isLiveContent && startMs > 0L)) status = LiveStatus.ENDED;
         else status = LiveStatus.NOT_LIVE;
+
+        Long viewers = isLiveNow ? parseLongSafe(str(videoDetails, "viewCount")) : null;
+        Long likes = null;
+        String chatContinuation = null;
+
+        if (initialData != null) {
+            chatContinuation = extractChatContinuation(initialData);
+            JsonObject primaryInfo = findObjectByKey(initialData, "videoPrimaryInfoRenderer", 0);
+            if (primaryInfo != null) {
+                if (viewers == null && isLiveNow) {
+                    JsonObject vcRenderer = obj(obj(primaryInfo, "viewCount"), "videoViewCountRenderer");
+                    viewers = parseCompactNumber(readText(obj(vcRenderer, "viewCount")));
+                }
+                likes = extractLikeCount(primaryInfo);
+            }
+
+            JsonObject ownerRenderer = findObjectByKey(initialData, "videoOwnerRenderer", 0);
+            if (ownerRenderer != null) {
+                String subText = readText(obj(ownerRenderer, "subscriberCountText"));
+                Long subs = parseCompactNumber(subText);
+                String handle = extractHandle(ownerRenderer);
+                this.cachedChannel = new ChannelInfo(
+                    channelId != null ? channelId : "",
+                    author != null ? author : "--",
+                    handle != null ? handle : "--",
+                    subs,
+                    null
+                );
+            }
+        }
+
+        if (this.cachedChannel == null) {
+            this.cachedChannel = new ChannelInfo(
+                channelId != null ? channelId : "",
+                author != null ? author : "--",
+                "--",
+                null,
+                null
+            );
+        }
 
         return new VideoInfo(
             videoId,
-            str(snippet, "title"),
-            str(snippet, "channelId"),
-            str(snippet, "channelTitle"),
+            title != null ? title : "--",
+            channelId != null ? channelId : "",
+            author != null ? author : "--",
             status,
-            number(live, "concurrentViewers"),
-            number(stats, "likeCount"),
-            start,
-            str(live, "activeLiveChatId"));
+            viewers,
+            likes,
+            startMs,
+            chatContinuation
+        );
     }
 
     @Override
-    public ChannelInfo fetchChannel(String channelId) throws ProviderException {
-        JsonObject root = get("channels", Map.of("part", "snippet,statistics", "id", channelId));
-        JsonArray items = array(root, "items");
-        if (items == null || items.isEmpty()) {
-            throw new ProviderException(Kind.NOT_FOUND, "Channel information is unavailable.");
+    public ChannelInfo fetchChannel(String channelId) {
+        if (cachedChannel != null) {
+            return cachedChannel;
         }
-        JsonObject item = items.get(0).getAsJsonObject();
-        JsonObject snippet = obj(item, "snippet");
-        JsonObject stats = obj(item, "statistics");
-        boolean hidden = stats != null && stats.has("hiddenSubscriberCount")
-            && stats.get("hiddenSubscriberCount").getAsBoolean();
-        String avatar = null;
-        JsonObject thumbs = obj(snippet, "thumbnails");
-        JsonObject def = obj(thumbs, "default");
-        if (def != null) avatar = str(def, "url");
-        return new ChannelInfo(
-            channelId,
-            str(snippet, "title"),
-            str(snippet, "customUrl"),
-            hidden ? null : number(stats, "subscriberCount"),
-            avatar);
+        return new ChannelInfo(channelId, "--", "--", null, null);
     }
 
     @Override
-    public ChatBatch fetchChat(String liveChatId, String pageToken) throws ProviderException {
-        Map<String, String> params = new LinkedHashMap<>();
-        params.put("liveChatId", liveChatId);
-        params.put("part", "snippet,authorDetails");
-        params.put("maxResults", "200");
-        if (pageToken != null && !pageToken.isEmpty()) params.put("pageToken", pageToken);
-        JsonObject root = get("liveChat/messages", params);
-
-        List<ChatMessage> out = new ArrayList<>();
-        JsonArray items = array(root, "items");
-        long nowNs = System.nanoTime();
-        if (items != null) {
-            for (JsonElement el : items) {
-                JsonObject item = el.getAsJsonObject();
-                JsonObject snippet = obj(item, "snippet");
-                JsonObject author = obj(item, "authorDetails");
-                if (snippet == null || author == null) continue;
-                if (snippet.has("hasDisplayContent") && !snippet.get("hasDisplayContent").getAsBoolean()) continue;
-                String text = str(snippet, "displayMessage");
-                String id = str(item, "id");
-                if (id == null || text == null || text.isEmpty()) continue;
-                out.add(new ChatMessage(
-                    id,
-                    orDefault(str(author, "displayName"), "?"),
-                    text,
-                    parseTime(str(snippet, "publishedAt")),
-                    nowNs,
-                    bool(author, "isChatOwner"),
-                    bool(author, "isChatModerator"),
-                    bool(author, "isChatSponsor")));
-            }
+    public ChatBatch fetchChat(String liveChatContinuation, String pageToken) throws ProviderException {
+        String token = (pageToken != null && !pageToken.isEmpty()) ? pageToken : liveChatContinuation;
+        if (token == null || token.isEmpty()) {
+            throw new ProviderException(Kind.CHAT_DISABLED, "Live chat token unavailable.");
         }
-        long poll = root.has("pollingIntervalMillis") ? root.get("pollingIntervalMillis").getAsLong() : DEFAULT_POLL_MS;
-        return new ChatBatch(out, str(root, "nextPageToken"), poll);
-    }
 
-    private JsonObject get(String path, Map<String, String> params) throws ProviderException {
-        String key = apiKey.get();
-        if (key == null || key.isBlank()) {
-            throw new ProviderException(Kind.MISSING_KEY, "No YouTube API key set. Add one in the Stream Connection panel.");
-        }
-        StringBuilder url = new StringBuilder(BASE).append(path).append('?');
-        for (Map.Entry<String, String> e : params.entrySet()) {
-            url.append(enc(e.getKey())).append('=').append(enc(e.getValue())).append('&');
-        }
-        url.append("key=").append(enc(key.trim()));
+        String payload = "{\"context\":{\"client\":{\"clientName\":\"WEB\",\"clientVersion\":\"2.20241126.01.00\",\"hl\":\"en\",\"gl\":\"US\"}},\"continuation\":\""
+            + escapeJson(token) + "\"}";
 
-        HttpRequest request = HttpRequest.newBuilder(URI.create(url.toString()))
-            .timeout(Duration.ofSeconds(12))
+        HttpRequest req = HttpRequest.newBuilder(URI.create(LIVE_CHAT_URL))
+            .timeout(Duration.ofSeconds(10))
+            .header("User-Agent", USER_AGENT)
+            .header("Content-Type", "application/json")
             .header("Accept", "application/json")
-            .GET()
+            .header("Cookie", "CONSENT=YES+cb")
+            .POST(HttpRequest.BodyPublishers.ofString(payload, StandardCharsets.UTF_8))
             .build();
 
-        HttpResponse<String> response;
+        HttpResponse<String> resp;
         try {
-            response = http.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            resp = http.send(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new ProviderException(Kind.CANCELLED, "Request cancelled.", e);
+            throw new ProviderException(Kind.CANCELLED, "Cancelled", e);
         } catch (IOException e) {
-            throw new ProviderException(Kind.NETWORK, "Network problem: " + e.getClass().getSimpleName(), e);
+            throw new ProviderException(Kind.NETWORK, "Network error while reading live chat.", e);
         }
 
-        int code = response.statusCode();
-        JsonObject json;
+        if (resp.statusCode() != 200) {
+            throw new ProviderException(Kind.SERVER, "YouTube chat HTTP " + resp.statusCode());
+        }
+
+        JsonObject root;
         try {
-            JsonElement parsed = JsonParser.parseString(response.body());
-            json = parsed.isJsonObject() ? parsed.getAsJsonObject() : new JsonObject();
-        } catch (JsonParseException e) {
-            if (code >= 500) throw new ProviderException(Kind.SERVER, "YouTube server error (" + code + ").", e);
-            throw new ProviderException(Kind.MALFORMED, "Unreadable response from YouTube.", e);
+            root = JsonParser.parseString(resp.body()).getAsJsonObject();
+        } catch (Exception e) {
+            throw new ProviderException(Kind.MALFORMED, "Invalid chat JSON from YouTube.", e);
         }
-        if (code >= 200 && code < 300) return json;
-        throw mapError(code, json);
-    }
 
-    private static ProviderException mapError(int code, JsonObject json) {
-        JsonObject error = obj(json, "error");
-        String message = orDefault(str(error, "message"), "HTTP " + code);
-        String reason = null;
-        JsonArray errors = array(error, "errors");
-        if (errors != null && !errors.isEmpty()) reason = str(errors.get(0).getAsJsonObject(), "reason");
-        if (reason == null) reason = "";
+        JsonObject liveChatCont = obj(obj(root, "continuationContents"), "liveChatContinuation");
+        if (liveChatCont == null) {
+            throw new ProviderException(Kind.CHAT_ENDED, "Live chat has ended.");
+        }
 
-        return switch (reason) {
-            case "quotaExceeded", "dailyLimitExceeded" ->
-                new ProviderException(Kind.QUOTA_EXCEEDED, "YouTube API daily quota is used up. Try again tomorrow or use another key.");
-            case "rateLimitExceeded", "userRateLimitExceeded" ->
-                new ProviderException(Kind.RATE_LIMITED, "YouTube is rate limiting requests. Slowing down.");
-            case "keyInvalid", "badRequest", "keyExpired" ->
-                new ProviderException(Kind.INVALID_KEY, "YouTube rejected the API key: " + message);
-            case "liveChatEnded", "liveChatNotFound" ->
-                new ProviderException(Kind.CHAT_ENDED, "Live chat has ended.");
-            case "liveChatDisabled" ->
-                new ProviderException(Kind.CHAT_DISABLED, "Live chat is disabled for this stream.");
-            case "forbidden", "accessNotConfigured", "ipRefererBlocked" ->
-                new ProviderException(Kind.FORBIDDEN, "Access denied: " + message);
-            default -> {
-                if (code == 404) yield new ProviderException(Kind.NOT_FOUND, "Not found: " + message);
-                if (code == 429) yield new ProviderException(Kind.RATE_LIMITED, "Too many requests. Slowing down.");
-                if (code == 401 || code == 403) yield new ProviderException(Kind.FORBIDDEN, "Access denied: " + message);
-                if (code >= 500) yield new ProviderException(Kind.SERVER, "YouTube server error (" + code + ").");
-                yield new ProviderException(Kind.MALFORMED, "Unexpected YouTube response: " + message);
+        String nextToken = token;
+        long timeoutMs = DEFAULT_POLL_MS;
+        JsonArray continuations = array(liveChatCont, "continuations");
+        if (continuations != null && !continuations.isEmpty()) {
+            JsonObject contObj = continuations.get(0).getAsJsonObject();
+            for (String key : new String[]{"invalidationContinuationData", "timedContinuationData", "reloadContinuationData"}) {
+                JsonObject data = obj(contObj, key);
+                if (data != null) {
+                    String c = str(data, "continuation");
+                    if (c != null && !c.isEmpty()) nextToken = c;
+                    if (data.has("timeoutMs")) timeoutMs = data.get("timeoutMs").getAsLong();
+                    break;
+                }
             }
-        };
+        }
+
+        List<ChatMessage> messages = new ArrayList<>();
+        JsonArray actions = array(liveChatCont, "actions");
+        long nowNs = System.nanoTime();
+        if (actions != null) {
+            for (JsonElement el : actions) {
+                JsonObject item = obj(obj(el.getAsJsonObject(), "addChatItemAction"), "item");
+                if (item == null) continue;
+                JsonObject renderer = obj(item, "liveChatTextMessageRenderer");
+                if (renderer == null) renderer = obj(item, "liveChatPaidMessageRenderer");
+                if (renderer == null) continue;
+
+                String id = str(renderer, "id");
+                String author = readText(obj(renderer, "authorName"));
+                String content = readMessageRuns(obj(renderer, "message"));
+                if (id == null || content.isEmpty()) continue;
+
+                long tsMs = System.currentTimeMillis();
+                String usec = str(renderer, "timestampUsec");
+                if (usec != null) {
+                    try { tsMs = Long.parseLong(usec) / 1000L; } catch (NumberFormatException ignored) {}
+                }
+
+                boolean isOwner = false;
+                boolean isMod = false;
+                boolean isMember = false;
+                JsonArray badges = array(renderer, "authorBadges");
+                if (badges != null) {
+                    for (JsonElement bEl : badges) {
+                        JsonObject br = obj(bEl.getAsJsonObject(), "liveChatAuthorBadgeRenderer");
+                        if (br == null) continue;
+                        if (br.has("customThumbnail")) isMember = true;
+                        String iconType = str(obj(br, "icon"), "iconType");
+                        if ("OWNER".equals(iconType)) isOwner = true;
+                        else if ("MODERATOR".equals(iconType)) isMod = true;
+                    }
+                }
+
+                messages.add(new ChatMessage(
+                    id,
+                    author.isEmpty() ? "Viewer" : author,
+                    content,
+                    tsMs,
+                    nowNs,
+                    isOwner,
+                    isMod,
+                    isMember
+                ));
+            }
+        }
+
+        return new ChatBatch(messages, nextToken, Math.max(2_500L, Math.min(8_000L, timeoutMs)));
     }
 
-    private static String enc(String v) { return URLEncoder.encode(v, StandardCharsets.UTF_8); }
+    private String fetchWatchHtml(String videoId) throws ProviderException {
+        HttpRequest req = HttpRequest.newBuilder(URI.create(WATCH_URL + videoId + "&hl=en"))
+            .timeout(Duration.ofSeconds(10))
+            .header("User-Agent", USER_AGENT)
+            .header("Accept-Language", "en-US,en;q=0.9")
+            .header("Cookie", "CONSENT=YES+cb")
+            .GET()
+            .build();
+        try {
+            HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            if (resp.statusCode() != 200) {
+                throw new ProviderException(Kind.SERVER, "YouTube returned HTTP " + resp.statusCode());
+            }
+            return resp.body();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new ProviderException(Kind.CANCELLED, "Cancelled", e);
+        } catch (IOException e) {
+            throw new ProviderException(Kind.NETWORK, "Cannot reach YouTube. Check internet connection.", e);
+        }
+    }
+
+    private static String extractChatContinuation(JsonObject initialData) {
+        JsonObject liveChatRenderer = findObjectByKey(initialData, "liveChatRenderer", 0);
+        if (liveChatRenderer == null) return null;
+
+        // Prefer unfiltered "Live chat" (all messages) sub-menu item if available
+        JsonObject sortMenu = findObjectByKey(liveChatRenderer, "sortFilterSubMenuRenderer", 0);
+        JsonArray subItems = array(sortMenu, "subMenuItems");
+        if (subItems != null && subItems.size() > 1) {
+            JsonObject item1 = subItems.get(1).getAsJsonObject();
+            String c = str(obj(obj(item1, "continuation"), "reloadContinuationData"), "continuation");
+            if (c != null && !c.isEmpty()) return c;
+        }
+
+        JsonArray conts = array(liveChatRenderer, "continuations");
+        if (conts != null && !conts.isEmpty()) {
+            JsonObject first = conts.get(0).getAsJsonObject();
+            for (String k : new String[]{"reloadContinuationData", "invalidationContinuationData", "timedContinuationData"}) {
+                String c = str(obj(first, k), "continuation");
+                if (c != null && !c.isEmpty()) return c;
+            }
+        }
+        return null;
+    }
+
+    private static Long extractLikeCount(JsonObject primaryInfo) {
+        JsonObject likeModel = findObjectByKey(primaryInfo, "likeButtonViewModel", 0);
+        if (likeModel != null) {
+            JsonObject btnModel = findObjectByKey(likeModel, "buttonViewModel", 0);
+            if (btnModel != null) {
+                Long parsed = parseCompactNumber(str(btnModel, "title"));
+                if (parsed != null) return parsed;
+            }
+        }
+        return null;
+    }
+
+    private static String extractHandle(JsonObject ownerRenderer) {
+        JsonObject webCmd = findObjectByKey(ownerRenderer, "webCommandMetadata", 0);
+        String url = str(webCmd, "url");
+        if (url != null && url.contains("/@")) {
+            return url.substring(url.indexOf("/@") + 1);
+        }
+        return "--";
+    }
+
+    private static JsonObject findObjectByKey(JsonElement element, String targetKey, int depth) {
+        if (element == null || depth > 14 || !element.isJsonObject()) return null;
+        JsonObject obj = element.getAsJsonObject();
+        if (obj.has(targetKey) && obj.get(targetKey).isJsonObject()) {
+            return obj.getAsJsonObject(targetKey);
+        }
+        for (String key : obj.keySet()) {
+            JsonElement child = obj.get(key);
+            if (child.isJsonObject()) {
+                JsonObject found = findObjectByKey(child, targetKey, depth + 1);
+                if (found != null) return found;
+            } else if (child.isJsonArray()) {
+                for (JsonElement item : child.getAsJsonArray()) {
+                    if (item.isJsonObject()) {
+                        JsonObject found = findObjectByKey(item, targetKey, depth + 1);
+                        if (found != null) return found;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private static JsonObject extractJsonObject(String html, String varName) {
+        int idx = html.indexOf(varName);
+        if (idx < 0) return null;
+        int startBrace = html.indexOf('{', idx + varName.length());
+        if (startBrace < 0) return null;
+
+        int depth = 0;
+        boolean inString = false;
+        boolean escaped = false;
+        for (int i = startBrace; i < html.length(); i++) {
+            char c = html.charAt(i);
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (c == '\\' && inString) {
+                escaped = true;
+                continue;
+            }
+            if (c == '"') {
+                inString = !inString;
+                continue;
+            }
+            if (!inString) {
+                if (c == '{') depth++;
+                else if (c == '}') {
+                    depth--;
+                    if (depth == 0) {
+                        try {
+                            return JsonParser.parseString(html.substring(startBrace, i + 1)).getAsJsonObject();
+                        } catch (Exception e) {
+                            return null;
+                        }
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private static String readText(JsonObject container) {
+        if (container == null) return "";
+        String simple = str(container, "simpleText");
+        if (simple != null) return simple;
+        JsonArray runs = array(container, "runs");
+        if (runs != null) {
+            StringBuilder sb = new StringBuilder();
+            for (JsonElement el : runs) {
+                String t = str(el.getAsJsonObject(), "text");
+                if (t != null) sb.append(t);
+            }
+            return sb.toString();
+        }
+        return "";
+    }
+
+    private static String readMessageRuns(JsonObject msgObj) {
+        if (msgObj == null) return "";
+        JsonArray runs = array(msgObj, "runs");
+        if (runs == null) return readText(msgObj);
+        StringBuilder sb = new StringBuilder();
+        for (JsonElement el : runs) {
+            JsonObject run = el.getAsJsonObject();
+            String t = str(run, "text");
+            if (t != null) {
+                sb.append(t);
+            } else if (run.has("emoji")) {
+                JsonObject emoji = obj(run, "emoji");
+                JsonArray shortcuts = array(emoji, "shortcuts");
+                if (shortcuts != null && !shortcuts.isEmpty()) {
+                    sb.append(shortcuts.get(0).getAsString());
+                } else {
+                    String eid = str(emoji, "emojiId");
+                    if (eid != null) sb.append(eid);
+                }
+            }
+        }
+        return sb.toString();
+    }
+
+    private static Long parseCompactNumber(String text) {
+        if (text == null || text.isBlank()) return null;
+        String cleaned = text.replace(",", "");
+        Matcher m = NUMBER_PATTERN.matcher(cleaned);
+        if (!m.find()) return null;
+        try {
+            double val = Double.parseDouble(m.group(1));
+            String suffix = m.group(2);
+            if (suffix != null) {
+                switch (suffix.toUpperCase(Locale.ROOT)) {
+                    case "K" -> val *= 1_000.0;
+                    case "M" -> val *= 1_000_000.0;
+                    case "B" -> val *= 1_000_000_000.0;
+                }
+            }
+            return Math.round(val);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private static Long parseLongSafe(String raw) {
+        if (raw == null) return null;
+        try { return Long.parseLong(raw.trim()); } catch (NumberFormatException e) { return null; }
+    }
+
+    private static long parseIsoTime(String iso) {
+        if (iso == null || iso.isEmpty()) return 0L;
+        try {
+            return OffsetDateTime.parse(iso).toInstant().toEpochMilli();
+        } catch (Exception e) {
+            return 0L;
+        }
+    }
+
+    private static String escapeJson(String s) {
+        return s.replace("\\", "\\\\").replace("\"", "\\\"");
+    }
 
     private static JsonObject obj(JsonObject parent, String key) {
         if (parent == null || !parent.has(key) || !parent.get(key).isJsonObject()) return null;
@@ -225,32 +477,14 @@ public final class YouTubeDataApiProvider implements StreamDataProvider {
 
     private static String str(JsonObject parent, String key) {
         if (parent == null || !parent.has(key) || parent.get(key).isJsonNull()) return null;
-        return parent.get(key).getAsString();
+        try { return parent.get(key).getAsString(); } catch (Exception e) { return null; }
     }
 
     private static boolean bool(JsonObject parent, String key) {
-        return parent != null && parent.has(key) && parent.get(key).getAsBoolean();
-    }
-
-    /** YouTube returns counts as strings; null means the value is hidden or not provided. */
-    private static Long number(JsonObject parent, String key) {
-        String raw = str(parent, key);
-        if (raw == null) return null;
         try {
-            return Long.parseLong(raw);
-        } catch (NumberFormatException e) {
-            return null;
+            return parent != null && parent.has(key) && parent.get(key).getAsBoolean();
+        } catch (Exception e) {
+            return false;
         }
     }
-
-    private static long parseTime(String iso) {
-        if (iso == null) return 0L;
-        try {
-            return Instant.parse(iso).toEpochMilli();
-        } catch (RuntimeException e) {
-            return 0L;
-        }
-    }
-
-    private static String orDefault(String v, String fallback) { return v == null || v.isEmpty() ? fallback : v; }
 }

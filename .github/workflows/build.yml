@@ -22,10 +22,10 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      - name: Setup Gradle
+      - name: Setup Gradle 9.2.1
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.14'
+          gradle-version: '9.2.1'
 
       - name: Build LiveStream Mod JAR
         run: |
@@ -46,6 +46,7 @@ jobs:
           name: LiveStream v${{ github.run_number }} (1.21.11)
           body: |
             Automated build of **LiveStream** for Minecraft **1.21.11** (Fabric).
+            - **100% Free & Keyless YouTube Live Integration** (No API Key required)
             - **File:** `LiveStream-v${{ github.run_number }}-1.21.11.jar`
           files: |
             build/libs/LiveStream-v${{ github.run_number }}-1.21.11.jar

@@ -24,10 +24,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * Owns the connection lifecycle. All network work runs on one daemon worker thread; the render
- * thread only reads the immutable snapshot and the bounded chat deque.
- */
 public final class StreamManager {
     private static final Logger LOGGER = LoggerFactory.getLogger("LiquidGlass/Stream");
 
@@ -69,7 +65,6 @@ public final class StreamManager {
 
     private static final int MAX_RETRIES = 8;
     private static final long MIN_CHAT_POLL_MS = 3_000L;
-    private static final long CHANNEL_REFRESH_MS = 10 * 60_000L;
     private static final int SEEN_IDS_LIMIT = 600;
 
     private static final StreamManager INSTANCE = new StreamManager();
@@ -82,7 +77,6 @@ public final class StreamManager {
         return t;
     });
 
-    private volatile String apiKey = "";
     private volatile String lastUrl = "";
     private volatile int refreshIntervalSec = 30;
     private volatile int maxChatHistory = 100;
@@ -102,9 +96,12 @@ public final class StreamManager {
         return m.find() ? Optional.of(m.group(1)) : Optional.empty();
     }
 
-    public synchronized void connect(String rawUrl, String key) {
+    public synchronized void connect(String rawUrl) {
+        connect(rawUrl, "");
+    }
+
+    public synchronized void connect(String rawUrl, String unusedKey) {
         this.lastUrl = rawUrl == null ? "" : rawUrl.trim();
-        this.apiKey = key == null ? "" : key.trim();
         stopSession();
         chatBuffer.clear();
 
@@ -113,14 +110,10 @@ public final class StreamManager {
             snapshotRef.set(error("", "Invalid YouTube link. Use a watch?v=, /live/ or youtu.be link."));
             return;
         }
-        if (apiKey.isEmpty()) {
-            snapshotRef.set(error(id.get(), "No YouTube API key set. Paste your key in the API key field."));
-            return;
-        }
-        Session s = new Session(id.get(), new YouTubeDataApiProvider(() -> this.apiKey));
+        Session s = new Session(id.get(), new YouTubeDataApiProvider());
         this.session = s;
         snapshotRef.set(new StreamSnapshot(ConnectionState.CONNECTING, id.get(), "--", "--", null, "--", null, null, 0L,
-            "Connecting to stream..."));
+            "Connecting to YouTube stream (Keyless Mode)..."));
         s.schedule(s::refreshVideo, 0L);
     }
 
@@ -131,7 +124,7 @@ public final class StreamManager {
     }
 
     public synchronized void refresh() {
-        if (!lastUrl.isEmpty()) connect(lastUrl, apiKey);
+        if (!lastUrl.isEmpty()) connect(lastUrl);
     }
 
     private void stopSession() {
@@ -161,7 +154,6 @@ public final class StreamManager {
     public int refreshIntervalSec() { return refreshIntervalSec; }
     public void setRefreshIntervalSec(int value) { this.refreshIntervalSec = Math.max(15, Math.min(300, value)); }
 
-    /** One connection attempt for one video. Methods run only on the worker thread. */
     private final class Session {
         private final String videoId;
         private final StreamDataProvider provider;
@@ -172,7 +164,6 @@ public final class StreamManager {
 
         private VideoInfo video;
         private ChannelInfo channel;
-        private long channelFetchedAt = 0L;
         private int failures = 0;
         private int chatFailures = 0;
         private String chatId;
@@ -208,20 +199,19 @@ public final class StreamManager {
         void refreshVideo() {
             try {
                 video = provider.fetchVideo(videoId);
+                channel = provider.fetchChannel(video.channelId());
                 failures = 0;
                 lastSuccessEpochMs = System.currentTimeMillis();
             } catch (ProviderException e) {
                 handleFailure(e, this::refreshVideo);
                 return;
             }
-            refreshChannelIfStale();
 
             switch (video.status()) {
                 case LIVE -> {
-                    publish(ConnectionState.LIVE, "Live");
-                    if (video.activeLiveChatId() != null && !video.activeLiveChatId().equals(chatId)) {
+                    publish(ConnectionState.LIVE, "Connected (Keyless Free Mode)");
+                    if (video.activeLiveChatId() != null && chatId == null) {
                         chatId = video.activeLiveChatId();
-                        pageToken = null;
                         chatNote = "";
                     }
                     if (chatId != null && !chatRunning) {
@@ -243,19 +233,6 @@ public final class StreamManager {
             }
         }
 
-        private void refreshChannelIfStale() {
-            long now = System.currentTimeMillis();
-            if (video.channelId() == null) return;
-            if (channel != null && now - channelFetchedAt < CHANNEL_REFRESH_MS) return;
-            try {
-                channel = provider.fetchChannel(video.channelId());
-                channelFetchedAt = now;
-            } catch (ProviderException e) {
-                LOGGER.warn("Channel info unavailable: {}", e.getMessage());
-                channelFetchedAt = now;
-            }
-        }
-
         void pollChat() {
             if (chatId == null) {
                 chatRunning = false;
@@ -274,7 +251,7 @@ public final class StreamManager {
                 }
                 if (!chatNote.isEmpty()) {
                     chatNote = "";
-                    publish(ConnectionState.LIVE, "Live");
+                    publish(ConnectionState.LIVE, "Connected (Keyless Free Mode)");
                 }
                 schedule(this::pollChat, Math.max(MIN_CHAT_POLL_MS, batch.pollIntervalMs()));
             } catch (ProviderException e) {
@@ -283,46 +260,25 @@ public final class StreamManager {
         }
 
         private void handleChatFailure(ProviderException e) {
-            switch (e.kind()) {
-                case CHAT_ENDED -> {
-                    chatRunning = false;
-                    chatId = null;
-                    schedule(this::refreshVideo, 1_000L);
-                }
-                case CHAT_DISABLED -> stopChat("chat disabled");
-                case QUOTA_EXCEEDED -> {
-                    stopChat("quota used up");
-                    publish(ConnectionState.QUOTA_LIMITED, e.getMessage());
-                }
-                default -> {
-                    if (e.isRetryable() && ++chatFailures <= MAX_RETRIES) {
-                        long delay = Math.min(60L, 1L << Math.min(6, chatFailures));
-                        chatNote = "chat retrying in " + delay + "s";
-                        publish(ConnectionState.LIVE, "Live");
-                        schedule(this::pollChat, delay * 1000L);
-                    } else {
-                        stopChat("chat error: " + e.getMessage());
-                    }
-                }
+            if (e.isRetryable() && ++chatFailures <= MAX_RETRIES) {
+                long delay = Math.min(30L, 1L << Math.min(5, chatFailures));
+                chatNote = "chat retrying in " + delay + "s";
+                publish(ConnectionState.LIVE, "Live");
+                schedule(this::pollChat, delay * 1000L);
+            } else {
+                chatRunning = false;
+                chatId = null;
+                pageToken = null;
+                schedule(this::refreshVideo, 3_000L);
             }
-        }
-
-        private void stopChat(String note) {
-            chatRunning = false;
-            chatNote = note;
-            if (video != null && video.status() == LiveStatus.LIVE) publish(ConnectionState.LIVE, "Live");
         }
 
         private void handleFailure(ProviderException e, Runnable retryTask) {
             if (e.kind() == ProviderException.Kind.CANCELLED) return;
-            if (e.kind() == ProviderException.Kind.QUOTA_EXCEEDED) {
-                publish(ConnectionState.QUOTA_LIMITED, e.getMessage());
-                return;
-            }
             if (e.isRetryable() && ++failures <= MAX_RETRIES) {
                 long delay = Math.min(60L, 1L << Math.min(6, failures));
                 publish(ConnectionState.RECONNECTING,
-                    e.getMessage() + " Retrying in " + delay + "s (" + failures + "/" + MAX_RETRIES + ").");
+                    e.getMessage() + " Retrying in " + delay + "s...");
                 schedule(retryTask, delay * 1000L);
                 return;
             }
