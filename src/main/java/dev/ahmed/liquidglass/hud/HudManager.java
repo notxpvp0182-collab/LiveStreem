@@ -134,6 +134,7 @@ public final class HudManager {
         if (name != null && !name.isBlank()) this.activeProfile = name;
     }
 
+    public boolean isLiveChatEnabled() { for (HudElement el : elements) { if (el instanceof LiveChatElement) return el.isEnabled(); } return false; }
     public List<HudElement> elements() { return Collections.unmodifiableList(elements); }
     public String activeProfile() { return activeProfile; }
 }

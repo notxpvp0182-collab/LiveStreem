@@ -62,7 +62,7 @@ public final class LiquidGlassClient implements ClientModInitializer {
             }
 
             // Page Up: 1 click = scroll up, 2s hold (40 ticks) = continuous smooth scroll up
-            if (chatUpKey.isPressed()) {
+            if (HudManager.get().isLiveChatEnabled() && chatUpKey.isPressed()) {
                 upHoldTicks++;
                 if (upHoldTicks == 1) {
                     LiveChatElement.scrollUp(2);
@@ -74,7 +74,7 @@ public final class LiquidGlassClient implements ClientModInitializer {
             }
 
             // Page Down: 1 click = scroll down, 2s hold (40 ticks) = jump straight to live chat bottom
-            if (chatDownKey.isPressed()) {
+            if (HudManager.get().isLiveChatEnabled() && chatDownKey.isPressed()) {
                 downHoldTicks++;
                 if (downHoldTicks == 1) {
                     LiveChatElement.scrollDown(2);
