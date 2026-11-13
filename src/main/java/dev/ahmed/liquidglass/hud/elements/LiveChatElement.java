@@ -40,7 +40,7 @@ public final class LiveChatElement extends HudElement {
     public boolean coloredMessages = false;
     public boolean rgbMode = false;
     public boolean newestAtTop = false;
-    public boolean chatShadow = true; // Nametag-style dark backdrop behind lines
+    public boolean chatShadow = false; // Nametag-style dark backdrop behind lines
     public boolean textShadow = true; // Crisp drop shadow on text
 
     public int usernameColor = 0xFFD8DEE9;

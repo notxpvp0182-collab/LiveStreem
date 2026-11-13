@@ -1,13 +1,10 @@
 package dev.ahmed.liquidglass.ui.font;
 
 import java.text.Bidi;
+import java.text.Normalizer;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * Reorders Bengali (বাংলা) and Devanagari pre-base vowel signs (ি, ে, ৈ, ো, ৌ)
- * and handles RTL Bidi so complex world scripts render naturally in Minecraft's font engine.
- */
 public final class WorldLanguageShaper {
     private static final Map<String, String> CACHE = new ConcurrentHashMap<>(512);
 
@@ -19,7 +16,15 @@ public final class WorldLanguageShaper {
         return CACHE.computeIfAbsent(input, WorldLanguageShaper::shapeInternal);
     }
 
-    private static String shapeInternal(String text) {
+    private static String shapeInternal(String rawText) {
+        // Normalize decomposed nukta characters (য+় -> য়, ড+় -> ড়, ঢ+় -> ঢ়)
+        String text = Normalizer.normalize(rawText, Normalizer.Form.NFC)
+            .replace("\u09AF\u09BC", "\u09DF")
+            .replace("\u09A1\u09BC", "\u09DC")
+            .replace("\u09A2\u09BC", "\u09DD")
+            .replace("\u200C", "")
+            .replace("\u200D", "");
+
         boolean hasBengali = false;
         boolean hasDevanagari = false;
         boolean hasRtl = false;
@@ -39,39 +44,49 @@ public final class WorldLanguageShaper {
     }
 
     private static String shapeBengali(String s) {
-        StringBuilder sb = new StringBuilder(s.length() + 4);
-        int n = s.length();
+        // Handle Reph (র + ্ + C -> C + রেফ marker \u09F0 so it doesn't break the word)
+        StringBuilder pre = new StringBuilder(s.length());
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '\u09B0' && i + 2 < s.length() && s.charAt(i + 1) == '\u09CD' && isBengaliConsonant(s.charAt(i + 2))) {
+                pre.append(s.charAt(i + 2)).append('\u09CD');
+                i += 2;
+            } else {
+                pre.append(c);
+            }
+        }
+
+        String work = pre.toString();
+        StringBuilder sb = new StringBuilder(work.length() + 4);
+        int n = work.length();
         int i = 0;
         while (i < n) {
-            char c = s.charAt(i);
+            char c = work.charAt(i);
             if (isBengaliConsonant(c)) {
                 int clusterStart = i;
                 int j = i + 1;
                 while (j < n) {
-                    char next = s.charAt(j);
-                    if (next == '\u09BC') { // Nukta
+                    char next = work.charAt(j);
+                    if (next == '\u09BC') {
                         j++;
-                    } else if (next == '\u09CD' && j + 1 < n && isBengaliConsonant(s.charAt(j + 1))) { // Hasanta + Consonant conjunct
+                    } else if (next == '\u09CD' && j + 1 < n && isBengaliConsonant(work.charAt(j + 1))) {
                         j += 2;
                     } else {
                         break;
                     }
                 }
-                String cluster = s.substring(clusterStart, j);
+                String cluster = work.substring(clusterStart, j);
                 if (j < n) {
-                    char matra = s.charAt(j);
+                    char matra = work.charAt(j);
                     if (matra == '\u09BF' || matra == '\u09C7' || matra == '\u09C8') {
-                        // ি, ে, ৈ move visually BEFORE the consonant cluster
                         sb.append(matra).append(cluster);
                         i = j + 1;
                         continue;
                     } else if (matra == '\u09CB') {
-                        // ো splits into ে + cluster + া
                         sb.append('\u09C7').append(cluster).append('\u09BE');
                         i = j + 1;
                         continue;
                     } else if (matra == '\u09CC') {
-                        // ৌ splits into ে + cluster + ৗ
                         sb.append('\u09C7').append(cluster).append('\u09D7');
                         i = j + 1;
                         continue;
@@ -100,7 +115,7 @@ public final class WorldLanguageShaper {
                     j += 2;
                 }
                 String cluster = s.substring(start, j);
-                if (j < n && s.charAt(j) == '\u093F') { // Short 'i' matra ि
+                if (j < n && s.charAt(j) == '\u093F') {
                     sb.append('\u093F').append(cluster);
                     i = j + 1;
                     continue;
@@ -123,6 +138,12 @@ public final class WorldLanguageShaper {
             }
         } catch (Exception ignored) {}
         return s;
+    }
+
+    public static boolean isZeroAdvanceCombiningMark(int cp) {
+        // Bengali & Devanagari combining marks (ু, ূ, ৃ, ঁ, ্, নুক্তা) that must NOT add horizontal space
+        return cp == 0x0981 || cp == 0x09BC || (cp >= 0x09C1 && cp <= 0x09C4) || cp == 0x09CD
+            || cp == 0x0901 || cp == 0x0902 || cp == 0x093C || (cp >= 0x0941 && cp <= 0x0948) || cp == 0x094D;
     }
 
     private static boolean isBengaliConsonant(char c) {

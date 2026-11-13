@@ -117,7 +117,7 @@ public final class StreamManager {
         Session s = new Session(id.get(), new YouTubeDataApiProvider());
         this.session = s;
         snapshotRef.set(new StreamSnapshot(ConnectionState.CONNECTING, id.get(), "--", "--", null, "--", null, null, 0L,
-            "Connecting to YouTube stream (Keyless Mode)..."));
+            "Connecting to stream..."));
         s.schedule(s::refreshVideo, 0L);
     }
 
@@ -253,7 +253,7 @@ public final class StreamManager {
 
             switch (video.status()) {
                 case LIVE -> {
-                    publish(ConnectionState.LIVE, "Connected (Keyless Free Mode)");
+                    publish(ConnectionState.LIVE, "Live");
                     if (video.activeLiveChatId() != null && chatId == null) {
                         chatId = video.activeLiveChatId();
                         chatNote = "";
@@ -295,7 +295,7 @@ public final class StreamManager {
                 }
                 if (!chatNote.isEmpty()) {
                     chatNote = "";
-                    publish(ConnectionState.LIVE, "Connected (Keyless Free Mode)");
+                    publish(ConnectionState.LIVE, "Live");
                 }
                 schedule(this::pollChat, Math.max(MIN_CHAT_POLL_MS, batch.pollIntervalMs()));
             } catch (ProviderException e) {

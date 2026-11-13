@@ -15,7 +15,7 @@ public final class ElementStyle {
     public int borderColor = 0x26FFFFFF;
     public float borderOpacity = 0.65f;
     public float borderWidth = 1.0f;
-    public float cornerRadius = 6.0f;
+    public float cornerRadius = 8.5f;
 
     public boolean shadowEnabled = true;
     public float shadowOpacity = 0.45f;

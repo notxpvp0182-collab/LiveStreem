@@ -44,7 +44,7 @@ public final class ConfigManager {
         public boolean coloredMessages = false;
         public boolean rgbMode = false;
         public boolean newestAtTop = false;
-        public boolean chatShadow = true;
+        public boolean chatShadow = false;
         public boolean textShadow = true;
         public int chatDelayMs = 0;
     }

@@ -3,6 +3,7 @@ package dev.ahmed.liquidglass.ui.clickgui;
 import dev.ahmed.liquidglass.config.ConfigManager;
 import dev.ahmed.liquidglass.hud.HudManager;
 import dev.ahmed.liquidglass.stream.StreamManager;
+import dev.ahmed.liquidglass.ui.animation.Animation;
 import dev.ahmed.liquidglass.ui.components.GlassTextField;
 import dev.ahmed.liquidglass.ui.render.IconRenderer;
 import dev.ahmed.liquidglass.ui.render.UIRenderer;
@@ -15,20 +16,31 @@ import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.input.CharInput;
 import net.minecraft.client.input.KeyInput;
 import net.minecraft.text.Text;
+import org.joml.Matrix3x2fStack;
 import org.lwjgl.glfw.GLFW;
 
 public final class WorkspaceModalScreen extends Screen {
     private static final String[] PROFILES = {"Default", "Streaming", "Gaming", "Minimal"};
     private final Screen parent;
-    private final GlassTextField streamUrlField = new GlassTextField("Paste YouTube Live URL (youtube.com/watch?v=... or /live/...)");
+    private final GlassTextField streamUrlField = new GlassTextField("Paste YouTube Live link...");
+    private final Animation openAnim = new Animation(0.0f, 0.25f, Animation.Easing.EASE_OUT_QUART);
+    private boolean closing = false;
     private long lastFrameNs = System.nanoTime();
 
     public WorkspaceModalScreen(Screen parent) {
-        super(Text.literal("LiveStream Workspace"));
+        super(Text.literal("Stream Workspace"));
         this.parent = parent;
         ConfigManager cfg = ConfigManager.get();
         String url = StreamManager.get().lastUrl().isEmpty() ? cfg.youtubeUrl() : StreamManager.get().lastUrl();
         streamUrlField.setText(url);
+        openAnim.animateTo(1.0f);
+    }
+
+    private void closeWithAnimation() {
+        if (!closing) {
+            closing = true;
+            openAnim.animateTo(0.0f);
+        }
     }
 
     @Override
@@ -37,20 +49,33 @@ public final class WorkspaceModalScreen extends Screen {
         float dt = Math.min(0.05f, (now - lastFrameNs) / 1_000_000_000.0f);
         lastFrameNs = now;
 
+        float progress = openAnim.update(dt);
+        if (closing && openAnim.isFinished()) {
+            if (this.client != null) this.client.setScreen(parent);
+            return;
+        }
+
         ThemeTokens t = ThemeManager.get().tokens();
-        ctx.fill(0, 0, this.width, this.height, t.bgOverlay());
+        ctx.fill(0, 0, this.width, this.height, UIRenderer.withAlpha(t.bgOverlay(), (int) (185 * progress)));
+
+        float scale = 0.93f + 0.07f * progress;
+        Matrix3x2fStack matrices = ctx.getMatrices();
+        matrices.pushMatrix();
+        matrices.translate(this.width * 0.5f, this.height * 0.5f + (1.0f - progress) * 10.0f);
+        matrices.scale(scale, scale);
+        matrices.translate(-this.width * 0.5f, -this.height * 0.5f);
 
         float modalW = Math.min(520.0f, this.width - 40.0f);
         float modalH = Math.min(310.0f, this.height - 40.0f);
         float mx = (this.width - modalW) * 0.5f;
         float my = (this.height - modalH) * 0.5f;
 
-        UIRenderer.drawGlassPanel(ctx, mx, my, modalW, modalH, t.radiusLarge(),
-            t.bgGlassStrong(), t.borderBase(), 0.1f, mouseX, mouseY);
+        UIRenderer.drawGlassPanel(ctx, mx, my, modalW, modalH, 14.0f,
+            t.bgGlassStrong(), t.borderBase(), 0.15f, mouseX, mouseY);
 
         IconRenderer.drawIcon(ctx, IconRenderer.Icon.BACK, mx + 12, my + 12, 10, t.textSecondary());
         UIRenderer.drawText(ctx, "Back", mx + 26, my + 13, t.textSecondary(), 1.0f, false, false);
-        UIRenderer.drawText(ctx, "LiveStream Connection (No API Key Needed)", mx + 74, my + 13, t.textPrimary(), 1.0f, false, false);
+        UIRenderer.drawText(ctx, "Stream Workspace", mx + 74, my + 13, t.textPrimary(), 1.0f, false, false);
 
         var snap = StreamManager.get().snapshot();
         String stateText = snap.state().name();
@@ -62,16 +87,16 @@ public final class WorkspaceModalScreen extends Screen {
         float sideY = my + 36;
         float sideW = 125;
         float sideH = modalH - 48;
-        UIRenderer.drawRoundedRect(ctx, sideX, sideY, sideW, sideH, t.radiusMedium(), t.bgElevated());
-        UIRenderer.drawRoundedBorder(ctx, sideX, sideY, sideW, sideH, t.radiusMedium(), 1.0f, t.borderBase());
+        UIRenderer.drawRoundedRect(ctx, sideX, sideY, sideW, sideH, 10.0f, t.bgElevated());
+        UIRenderer.drawRoundedBorder(ctx, sideX, sideY, sideW, sideH, 10.0f, 1.0f, t.borderBase());
 
         UIRenderer.drawText(ctx, "HUD PROFILES", sideX + 10, sideY + 10, t.textMuted(), 0.9f, true, false);
         for (int i = 0; i < PROFILES.length; i++) {
             float py = sideY + 26 + i * 24;
             boolean active = PROFILES[i].equals(HudManager.get().activeProfile());
-            UIRenderer.drawRoundedRect(ctx, sideX + 6, py, sideW - 12, 20, t.radiusSmall(),
+            UIRenderer.drawRoundedRect(ctx, sideX + 6, py, sideW - 12, 20, 7.0f,
                 active ? t.bgGlassStrong() : t.bgGlassWeak());
-            UIRenderer.drawRoundedBorder(ctx, sideX + 6, py, sideW - 12, 20, t.radiusSmall(), 1.0f,
+            UIRenderer.drawRoundedBorder(ctx, sideX + 6, py, sideW - 12, 20, 7.0f, 1.0f,
                 active ? t.borderActive() : t.borderBase());
             UIRenderer.drawText(ctx, PROFILES[i], sideX + 14, py + 6,
                 active ? t.textPrimary() : t.textSecondary(), 1.0f, false, false);
@@ -82,7 +107,7 @@ public final class WorkspaceModalScreen extends Screen {
         for (int i = 0; i < qualities.length; i++) {
             float qy = sideY + 148 + i * 22;
             boolean active = qualities[i] == ThemeManager.get().quality();
-            UIRenderer.drawRoundedRect(ctx, sideX + 6, qy, sideW - 12, 18, t.radiusSmall(),
+            UIRenderer.drawRoundedRect(ctx, sideX + 6, qy, sideW - 12, 18, 7.0f,
                 active ? t.bgGlassStrong() : t.bgGlassWeak());
             UIRenderer.drawText(ctx, qualities[i].name(), sideX + 14, qy + 5,
                 active ? t.accentPrimary() : t.textSecondary(), 1.0f, false, false);
@@ -92,10 +117,10 @@ public final class WorkspaceModalScreen extends Screen {
         float mainY = sideY;
         float mainW = modalW - sideW - 34;
         float mainH = sideH;
-        UIRenderer.drawRoundedRect(ctx, mainX, mainY, mainW, mainH, t.radiusMedium(), t.bgElevated());
-        UIRenderer.drawRoundedBorder(ctx, mainX, mainY, mainW, mainH, t.radiusMedium(), 1.0f, t.borderBase());
+        UIRenderer.drawRoundedRect(ctx, mainX, mainY, mainW, mainH, 10.0f, t.bgElevated());
+        UIRenderer.drawRoundedBorder(ctx, mainX, mainY, mainW, mainH, 10.0f, 1.0f, t.borderBase());
 
-        UIRenderer.drawText(ctx, "YouTube Live URL (100% Free & Unlimited)", mainX + 12, mainY + 14, t.textPrimary(), 1.0f, false, false);
+        UIRenderer.drawText(ctx, "Stream URL", mainX + 12, mainY + 14, t.textPrimary(), 1.0f, false, false);
         float fieldW = mainW - 24;
         streamUrlField.render(ctx, mainX + 12, mainY + 32, fieldW, 24, mouseX, mouseY, dt);
 
@@ -119,21 +144,23 @@ public final class WorkspaceModalScreen extends Screen {
             "Live Viewers", snap.viewerCount() != null ? HudManager.formatCompactNumber(snap.viewerCount()) : "--");
         drawTelemetryCard(ctx, mainX + 20 + cardW, mainY + 170, cardW, 42,
             "Likes", snap.likeCount() != null ? HudManager.formatCompactNumber(snap.likeCount()) : "--");
+
+        matrices.popMatrix();
     }
 
     private void drawButton(DrawContext ctx, float x, float y, float w, float h, String label, int mouseX, int mouseY) {
         ThemeTokens t = ThemeManager.get().tokens();
         boolean hover = mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + h;
-        UIRenderer.drawRoundedRect(ctx, x, y, w, h, t.radiusSmall(), hover ? t.bgGlassStrong() : t.bgGlassWeak());
-        UIRenderer.drawRoundedBorder(ctx, x, y, w, h, t.radiusSmall(), 1.0f, hover ? t.borderActive() : t.borderBase());
+        UIRenderer.drawRoundedRect(ctx, x, y, w, h, 7.5f, hover ? t.bgGlassStrong() : t.bgGlassWeak());
+        UIRenderer.drawRoundedBorder(ctx, x, y, w, h, 7.5f, 1.0f, hover ? t.borderActive() : t.borderBase());
         float tw = this.textRenderer.getWidth(label);
         UIRenderer.drawText(ctx, label, x + (w - tw) * 0.5f, y + (h - 8) * 0.5f, t.textPrimary(), 1.0f, false, false);
     }
 
     private void drawTelemetryCard(DrawContext ctx, float x, float y, float w, float h, String label, String value) {
         ThemeTokens t = ThemeManager.get().tokens();
-        UIRenderer.drawRoundedRect(ctx, x, y, w, h, t.radiusSmall(), t.bgGlassWeak());
-        UIRenderer.drawRoundedBorder(ctx, x, y, w, h, t.radiusSmall(), 1.0f, t.borderBase());
+        UIRenderer.drawRoundedRect(ctx, x, y, w, h, 8.0f, t.bgGlassWeak());
+        UIRenderer.drawRoundedBorder(ctx, x, y, w, h, 8.0f, 1.0f, t.borderBase());
         UIRenderer.drawText(ctx, label, x + 8, y + 8, t.textMuted(), 1.0f, true, false);
         UIRenderer.drawText(ctx, value, x + 8, y + 24, t.textPrimary(), 1.0f, false, false);
     }
@@ -150,7 +177,7 @@ public final class WorkspaceModalScreen extends Screen {
         float my = (this.height - modalH) * 0.5f;
 
         if (btn == 0 && cx >= mx + 10 && cx <= mx + 60 && cy >= my + 10 && cy <= my + 28) {
-            if (this.client != null) this.client.setScreen(parent);
+            closeWithAnimation();
             return true;
         }
 
@@ -208,12 +235,22 @@ public final class WorkspaceModalScreen extends Screen {
     }
 
     @Override
-    public boolean mouseDragged(Click click, double ox, double oy) { if (streamUrlField.mouseDragged(click.x())) return true; return super.mouseDragged(click, ox, oy); }
-    @Override public boolean mouseReleased(Click click) { streamUrlField.mouseReleased(); return super.mouseReleased(click); }
+    public boolean mouseDragged(Click click, double ox, double oy) {
+        if (streamUrlField.mouseDragged(click.x())) return true;
+        return super.mouseDragged(click, ox, oy);
+    }
+
+    @Override
+    public boolean mouseReleased(Click click) {
+        streamUrlField.mouseReleased();
+        return super.mouseReleased(click);
+    }
+
+    @Override
     public boolean keyPressed(KeyInput input) {
         if (streamUrlField.keyPressed(input)) return true;
         if (input.key() == GLFW.GLFW_KEY_ESCAPE) {
-            if (this.client != null) this.client.setScreen(parent);
+            closeWithAnimation();
             return true;
         }
         return super.keyPressed(input);

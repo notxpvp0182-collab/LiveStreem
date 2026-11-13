@@ -43,8 +43,8 @@ public final class LiquidClickGuiScreen extends Screen {
         public IconRenderer.Icon icon() { return icon; }
     }
 
-    private final Animation openAnim = new Animation(0.0f, 0.24f, Animation.Easing.EASE_OUT_QUART);
-    private final Animation expandAnim = new Animation(0.0f, 0.22f, Animation.Easing.EASE_OUT_CUBIC);
+    private final Animation openAnim = new Animation(0.0f, 0.25f, Animation.Easing.EASE_OUT_QUART);
+    private final Animation expandAnim = new Animation(0.0f, 0.24f, Animation.Easing.EASE_OUT_CUBIC);
     private final Animation panelSwitchAnim = new Animation(1.0f, 0.22f, Animation.Easing.EASE_OUT_QUART);
     private final Animation[] cardHoverAnims = new Animation[Category.values().length];
     private final Animation[] cardXAnims = new Animation[Category.values().length];
@@ -52,6 +52,7 @@ public final class LiquidClickGuiScreen extends Screen {
 
     private Category selectedCategory = null;
     private boolean closing = false;
+    private boolean draggingScrollbar = false;
     private long lastFrameNs = System.nanoTime();
     private float scrollOffset = 0.0f;
     private final List<GlassToggle> activeToggles = new ArrayList<>();
@@ -110,10 +111,10 @@ public final class LiquidClickGuiScreen extends Screen {
                         activeSliders.add(new GlassSlider("Chat Text Size", 0.7, 1.8, 0.1, "x",
                             () -> chat.style().scale,
                             val -> chat.style().scale = (float) val));
+                        activeToggles.add(new GlassToggle("Text Shadow", () -> chat.textShadow, v -> chat.textShadow = v));
+                        activeToggles.add(new GlassToggle("Line Background", () -> chat.chatShadow, v -> chat.chatShadow = v));
                         activeToggles.add(new GlassToggle("Newest Chat at Top", () -> chat.newestAtTop, v -> chat.newestAtTop = v));
                         activeToggles.add(new GlassToggle("YouTube Icon Badge", () -> chat.showYouTubeIcon, v -> chat.showYouTubeIcon = v));
-                        activeToggles.add(new GlassToggle("Chat Nametag Shadow", () -> chat.chatShadow, v -> chat.chatShadow = v));
-                        activeToggles.add(new GlassToggle("Text Drop Shadow", () -> chat.textShadow, v -> chat.textShadow = v));
                         activeToggles.add(new GlassToggle("Colored Usernames", () -> chat.coloredUsernames, v -> chat.coloredUsernames = v));
                         activeToggles.add(new GlassToggle("Multi-Color Chat", () -> chat.coloredMessages, v -> chat.coloredMessages = v));
                         activeToggles.add(new GlassToggle("RGB Chroma Mode", () -> chat.rgbMode, v -> chat.rgbMode = v));
@@ -136,6 +137,14 @@ public final class LiquidClickGuiScreen extends Screen {
         }
     }
 
+    private float getContentHeight() {
+        return activeSliders.size() * 28.0f + activeToggles.size() * 26.0f;
+    }
+
+    private float getMaxScroll(float viewHeight) {
+        return Math.max(0.0f, getContentHeight() - viewHeight);
+    }
+
     @Override
     public void render(DrawContext ctx, int mouseX, int mouseY, float deltaTicks) {
         long now = System.nanoTime();
@@ -155,7 +164,7 @@ public final class LiquidClickGuiScreen extends Screen {
 
         ctx.fill(0, 0, this.width, this.height, UIRenderer.withAlpha(t.bgOverlay(), (int) (175 * openProgress)));
 
-        float scale = 0.96f + 0.04f * openProgress;
+        float scale = 0.95f + 0.05f * openProgress;
         Matrix3x2fStack matrices = ctx.getMatrices();
         matrices.pushMatrix();
         matrices.translate(this.width * 0.5f, this.height * 0.5f);
@@ -189,7 +198,7 @@ public final class LiquidClickGuiScreen extends Screen {
                 } else {
                     int remIdx = (i < selIndex) ? i : (i - 1);
                     int slot = (remIdx < 2) ? remIdx : (remIdx + 1);
-                    targetCx = startX + slot * (cardW + gap) + (remIdx < 2 ? -105.0f : 105.0f);
+                    targetCx = startX + slot * (cardW + gap) + (remIdx < 2 ? -108.0f : 108.0f);
                 }
             }
 
@@ -213,22 +222,21 @@ public final class LiquidClickGuiScreen extends Screen {
                 ctx,
                 cx - grow * 0.5f, cardY - grow * 0.5f,
                 cardW + grow, cardH + grow,
-                t.radiusMedium(),
+                10.0f,
                 t.bgGlass(),
                 t.borderBase(),
                 hv, mouseX, mouseY
             );
 
             int iconColor = UIRenderer.lerpColor(t.textSecondary(), t.accentActive(), hv);
-            IconRenderer.drawIcon(ctx, cats[i].icon(), cx + (cardW - 14) * 0.5f, cardY + 18, 14, iconColor);
+            IconRenderer.drawIcon(ctx, cats[i].icon(), cx + (cardW - 14) * 0.5f, cardY + 17, 14, iconColor);
 
             String label = cats[i].title();
             int lw = this.textRenderer.getWidth(label);
             UIRenderer.drawText(ctx, label, cx + (cardW - lw) * 0.5f, cardY + cardH - 22,
                 t.textPrimary(), 1.0f, false, false);
-            ctx.fill(Math.round(cx + cardW * 0.35f), Math.round(cardY + cardH - 10),
-                     Math.round(cx + cardW * 0.65f), Math.round(cardY + cardH - 9),
-                     UIRenderer.lerpColor(t.textMuted(), t.accentPrimary(), hv));
+            UIRenderer.drawRoundedRect(ctx, cx + cardW * 0.34f, cardY + cardH - 10, cardW * 0.32f, 1.5f, 1.0f,
+                UIRenderer.lerpColor(t.textMuted(), t.accentPrimary(), hv));
         }
         cardPositionsInitialized = true;
 
@@ -238,12 +246,12 @@ public final class LiquidClickGuiScreen extends Screen {
 
         if (expand > 0.01f && selectedCategory != null) {
             float effectiveAnim = expand * (0.85f + 0.15f * switchAnim);
-            float panelW = 228.0f;
+            float panelW = 236.0f;
             float panelH = 236.0f * effectiveAnim;
             float px = centerX - panelW * 0.5f;
             float py = centerY - panelH * 0.5f + (1.0f - switchAnim) * 8.0f;
 
-            UIRenderer.drawGlassPanel(ctx, px, py, panelW, panelH, t.radiusLarge(),
+            UIRenderer.drawGlassPanel(ctx, px, py, panelW, panelH, 13.0f,
                 t.bgGlassStrong(), t.borderActive(), 0.4f, mouseX, mouseY);
 
             ctx.enableScissor(Math.round(px), Math.round(py), Math.round(px + panelW), Math.round(py + panelH));
@@ -254,32 +262,51 @@ public final class LiquidClickGuiScreen extends Screen {
             UIRenderer.drawText(ctx, catTitle, centerX - ctw * 0.5f, py + 19, t.textPrimary(), 1.0f, false, false);
 
             float btnX = px + 10;
-            float btnY = py + 34;
+            float btnY = py + 33;
             float btnW = panelW - 20;
             float btnH = 18;
             boolean editHover = mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
-            UIRenderer.drawRoundedRect(ctx, btnX, btnY, btnW, btnH, t.radiusSmall(),
+            UIRenderer.drawRoundedRect(ctx, btnX, btnY, btnW, btnH, 7.0f,
                 editHover ? t.bgGlassStrong() : t.bgElevated());
-            UIRenderer.drawRoundedBorder(ctx, btnX, btnY, btnW, btnH, t.radiusSmall(), 1.0f,
+            UIRenderer.drawRoundedBorder(ctx, btnX, btnY, btnW, btnH, 7.0f, 1.0f,
                 editHover ? t.borderActive() : t.borderBase());
             String topBtnText = "Edit HUD Layout";
             UIRenderer.drawText(ctx, topBtnText, centerX - this.textRenderer.getWidth(topBtnText) * 0.5f,
                 btnY + 5, t.textPrimary(), 1.0f, false, false);
 
-            float listTop = py + 58;
-            float listBottom = py + panelH - 8;
+            float listTop = py + 56;
+            float listBottom = py + panelH - 10;
+            float viewH = Math.max(10.0f, listBottom - listTop);
+            float maxScroll = getMaxScroll(viewH);
+            scrollOffset = Math.max(0.0f, Math.min(maxScroll, scrollOffset));
+
+            float rowWidth = maxScroll > 0.0f ? (panelW - 28.0f) : (panelW - 20.0f);
             ctx.enableScissor(Math.round(px + 6), Math.round(listTop), Math.round(px + panelW - 6), Math.round(listBottom));
 
             float rowY = listTop - scrollOffset;
             for (GlassSlider slider : activeSliders) {
-                slider.render(ctx, px + 10, rowY, panelW - 20, 24, mouseX, mouseY, dt);
+                slider.render(ctx, px + 10, rowY, rowWidth, 24, mouseX, mouseY, dt);
                 rowY += 28;
             }
             for (GlassToggle toggle : activeToggles) {
-                toggle.render(ctx, px + 10, rowY, panelW - 20, 22, mouseX, mouseY, dt);
+                toggle.render(ctx, px + 10, rowY, rowWidth, 22, mouseX, mouseY, dt);
                 rowY += 26;
             }
             ctx.disableScissor();
+
+            // Draggable Scrollbar on the right side of the buttons
+            if (maxScroll > 0.0f) {
+                float sbX = px + panelW - 11.0f;
+                float sbW = 4.5f;
+                UIRenderer.drawRoundedRect(ctx, sbX, listTop, sbW, viewH, 2.25f, 0x6608090C);
+                float contentH = getContentHeight();
+                float thumbH = Math.max(22.0f, viewH * (viewH / Math.max(viewH, contentH)));
+                float thumbY = listTop + (viewH - thumbH) * (scrollOffset / maxScroll);
+                boolean sbHover = draggingScrollbar || (mouseX >= sbX - 3 && mouseX <= sbX + sbW + 3 && mouseY >= listTop && mouseY <= listBottom);
+                UIRenderer.drawRoundedRect(ctx, sbX, thumbY, sbW, thumbH, 2.25f,
+                    sbHover ? t.accentActive() : t.accentPrimary());
+            }
+
             ctx.disableScissor();
         }
 
@@ -289,11 +316,27 @@ public final class LiquidClickGuiScreen extends Screen {
     private void drawDockButton(DrawContext ctx, float x, float y, float w, float h, String label, int mouseX, int mouseY) {
         ThemeTokens t = ThemeManager.get().tokens();
         boolean hover = mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + h;
-        UIRenderer.drawGlassPanel(ctx, x, y, w, h, t.radiusSmall(),
+        UIRenderer.drawGlassPanel(ctx, x, y, w, h, 8.0f,
             hover ? t.bgGlassStrong() : t.bgGlass(), hover ? t.borderActive() : t.borderBase(),
             hover ? 1.0f : 0.0f, mouseX, mouseY);
         int lw = this.textRenderer.getWidth(label);
         UIRenderer.drawText(ctx, label, x + (w - lw) * 0.5f, y + (h - 8) * 0.5f, t.textPrimary(), 1.0f, false, false);
+    }
+
+    private void updateScrollFromMouse(double mouseY) {
+        float panelH = 236.0f;
+        float py = this.height * 0.5f - panelH * 0.5f;
+        float listTop = py + 56.0f;
+        float listBottom = py + panelH - 10.0f;
+        float viewH = Math.max(10.0f, listBottom - listTop);
+        float maxScroll = getMaxScroll(viewH);
+        if (maxScroll <= 0.0f) return;
+
+        float contentH = getContentHeight();
+        float thumbH = Math.max(22.0f, viewH * (viewH / Math.max(viewH, contentH)));
+        float trackTravel = Math.max(1.0f, viewH - thumbH);
+        float ratio = ((float) mouseY - listTop - thumbH * 0.5f) / trackTravel;
+        scrollOffset = Math.max(0.0f, Math.min(maxScroll, ratio * maxScroll));
     }
 
     @Override
@@ -324,37 +367,48 @@ public final class LiquidClickGuiScreen extends Screen {
         float cardY = centerY - cardH * 0.5f;
 
         if (selectedCategory != null) {
-            float panelW = 228.0f;
+            float panelW = 236.0f;
             float panelH = 236.0f;
             float px = centerX - panelW * 0.5f;
             float py = centerY - panelH * 0.5f;
 
-            if (button == 0 && mx >= px + 10 && mx <= px + panelW - 10 && my >= py + 34 && my <= py + 52) {
+            if (button == 0 && mx >= px + 10 && mx <= px + panelW - 10 && my >= py + 33 && my <= py + 51) {
                 if (this.client != null) {
                     this.client.setScreen(new HudEditorScreen(this));
                 }
                 return true;
             }
 
-            float listTop = py + 58;
-            float listBottom = py + panelH - 8;
+            float listTop = py + 56;
+            float listBottom = py + panelH - 10;
+            float viewH = Math.max(10.0f, listBottom - listTop);
+            float maxScroll = getMaxScroll(viewH);
+
+            // Check Scrollbar Click / Drag Start
+            if (button == 0 && maxScroll > 0.0f && mx >= px + panelW - 15.0f && mx <= px + panelW - 4.0f
+                && my >= listTop && my <= listBottom) {
+                draggingScrollbar = true;
+                updateScrollFromMouse(my);
+                return true;
+            }
+
+            float rowWidth = maxScroll > 0.0f ? (panelW - 28.0f) : (panelW - 20.0f);
             if (my >= listTop && my <= listBottom) {
                 float rowY = listTop - scrollOffset;
                 for (GlassSlider slider : activeSliders) {
-                    if (slider.mouseClicked(mx, my, button, px + 10, rowY, panelW - 20, 24)) {
+                    if (slider.mouseClicked(mx, my, button, px + 10, rowY, rowWidth, 24)) {
                         return true;
                     }
                     rowY += 28;
                 }
                 for (GlassToggle toggle : activeToggles) {
-                    if (toggle.mouseClicked(mx, my, button, px + 10, rowY, panelW - 20, 22)) {
+                    if (toggle.mouseClicked(mx, my, button, px + 10, rowY, rowWidth, 22)) {
                         return true;
                     }
                     rowY += 26;
                 }
             }
 
-            // Check clicks on the 4 side cards (2 left, 2 right) with smooth transition animation
             if (mx < px || mx > px + panelW || my < py || my > py + panelH) {
                 for (int i = 0; i < cats.length; i++) {
                     if (cats[i] == selectedCategory) continue;
@@ -389,11 +443,17 @@ public final class LiquidClickGuiScreen extends Screen {
 
     @Override
     public boolean mouseDragged(Click click, double offsetX, double offsetY) {
+        if (draggingScrollbar) {
+            updateScrollFromMouse(click.y());
+            return true;
+        }
         if (selectedCategory != null) {
-            float panelW = 228.0f;
+            float panelW = 236.0f;
             float px = this.width * 0.5f - panelW * 0.5f;
+            float viewH = 170.0f;
+            float rowWidth = getMaxScroll(viewH) > 0.0f ? (panelW - 28.0f) : (panelW - 20.0f);
             for (GlassSlider slider : activeSliders) {
-                if (slider.mouseDragged(click.x(), px + 10, panelW - 20)) {
+                if (slider.mouseDragged(click.x(), px + 10, rowWidth)) {
                     return true;
                 }
             }
@@ -403,6 +463,7 @@ public final class LiquidClickGuiScreen extends Screen {
 
     @Override
     public boolean mouseReleased(Click click) {
+        draggingScrollbar = false;
         for (GlassSlider slider : activeSliders) {
             slider.mouseReleased();
         }
@@ -412,8 +473,7 @@ public final class LiquidClickGuiScreen extends Screen {
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
         if (selectedCategory != null) {
-            float contentH = activeSliders.size() * 28.0f + activeToggles.size() * 26.0f;
-            float maxScroll = Math.max(0.0f, contentH - 165.0f);
+            float maxScroll = getMaxScroll(170.0f);
             scrollOffset = Math.max(0.0f, Math.min(maxScroll, scrollOffset - (float) verticalAmount * 18.0f));
             return true;
         }
