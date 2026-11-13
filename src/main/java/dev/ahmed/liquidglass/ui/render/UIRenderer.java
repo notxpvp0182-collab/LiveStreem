@@ -1,6 +1,7 @@
 package dev.ahmed.liquidglass.ui.render;
 
 import dev.ahmed.liquidglass.ui.font.SmallCapsRenderer;
+import dev.ahmed.liquidglass.ui.font.WorldLanguageShaper;
 import dev.ahmed.liquidglass.ui.theme.GlassQuality;
 import dev.ahmed.liquidglass.ui.theme.ThemeManager;
 import dev.ahmed.liquidglass.ui.theme.ThemeTokens;
@@ -24,117 +25,89 @@ public final class UIRenderer {
         ThemeTokens t = ThemeManager.get().tokens();
         GlassQuality q = ThemeManager.get().quality();
 
-        // 1. Soft multi-layer ambient shadow
-        if (q.shadowEnabled()) {
-            drawShadow(ctx, x, y + t.shadowOffsetY(), w, h, radius, t.shadowRadius(), t.shadowColor());
+        if (q.shadowEnabled() && ((surfaceColor >>> 24) & 0xFF) > 10) {
+            drawShadow(ctx, x, y + 2.0f, w, h, radius, 4.0f, t.shadowColor());
         }
 
-        // 2. Frosted dark glass fill
         drawRoundedRect(ctx, x, y, w, h, radius, surfaceColor);
 
-        // 3. Mouse-responsive subtle radial sheen (HIGH/ULTRA)
-        if (q.innerHighlightEnabled() && hoverProgress > 0.001f) {
+        if (q.innerHighlightEnabled() && hoverProgress > 0.01f) {
             int hoverTint = withAlpha(t.accentPrimary(), (int) (18 * hoverProgress));
             drawRoundedRect(ctx, x + 1, y + 1, w - 2, h - 2, Math.max(0, radius - 1), hoverTint);
         }
 
-        // 4. 1px Top Specular Inner Highlight
-        if (q.innerHighlightEnabled() && w > radius * 2) {
-            int topRim = t.borderInner();
-            ctx.fill(Math.round(x + radius * 0.6f), Math.round(y + 1),
-                     Math.round(x + w - radius * 0.6f), Math.round(y + 2), topRim);
+        if (q.innerHighlightEnabled() && w > 8) {
+            ctx.fill(Math.round(x + 3), Math.round(y + 1), Math.round(x + w - 3), Math.round(y + 2), t.borderInner());
         }
 
-        // 5. Restrained 1px anti-aliased rounded border
-        int effectiveBorder = lerpColor(borderColor, t.borderActive(), hoverProgress);
-        drawRoundedBorder(ctx, x, y, w, h, radius, t.borderWidth(), effectiveBorder);
+        if (((borderColor >>> 24) & 0xFF) > 2) {
+            int effectiveBorder = lerpColor(borderColor, t.borderActive(), hoverProgress);
+            drawRoundedBorder(ctx, x, y, w, h, radius, 1.0f, effectiveBorder);
+        }
     }
 
     public static void drawShadow(DrawContext ctx, float x, float y, float w, float h, float radius, float spread, int shadowColor) {
         int baseAlpha = (shadowColor >>> 24) & 0xFF;
+        if (baseAlpha <= 4) return;
         int rgb = shadowColor & 0x00FFFFFF;
-        int steps = 4;
-        for (int i = 1; i <= steps; i++) {
-            float expand = (spread / steps) * i * 0.65f;
-            float falloff = 1.0f - ((float) i / (steps + 1));
-            int stepAlpha = Math.max(2, (int) (baseAlpha * falloff * 0.28f));
-            drawRoundedRect(ctx, x - expand, y - expand, w + expand * 2, h + expand * 2, radius + expand, (stepAlpha << 24) | rgb);
-        }
+        int c1 = (Math.max(4, baseAlpha / 4) << 24) | rgb;
+        int c2 = (Math.max(2, baseAlpha / 8) << 24) | rgb;
+        drawRoundedRect(ctx, x - 1.5f, y - 1.0f, w + 3.0f, h + 3.0f, radius + 1.0f, c1);
+        drawRoundedRect(ctx, x - 3.0f, y - 2.0f, w + 6.0f, h + 5.0f, radius + 2.0f, c2);
     }
 
     public static void drawRoundedRect(DrawContext ctx, float x, float y, float w, float h, float radius, int color) {
+        if (((color >>> 24) & 0xFF) <= 1) return;
         int ix = Math.round(x);
         int iy = Math.round(y);
         int iw = Math.round(w);
         int ih = Math.round(h);
-        int r = Math.min(Math.round(radius), Math.min(iw, ih) / 2);
+        if (iw <= 0 || ih <= 0) return;
 
+        int r = Math.min(Math.round(radius), Math.min(iw, ih) / 2);
         if (r <= 1) {
             ctx.fill(ix, iy, ix + iw, iy + ih, color);
             return;
         }
 
-        // Center body + left/right columns
-        ctx.fill(ix + r, iy, ix + iw - r, iy + ih, color);
-        ctx.fill(ix, iy + r, ix + r, iy + ih - r, color);
-        ctx.fill(ix + iw - r, iy + r, ix + iw, iy + ih - r, color);
-
-        // Smooth scanline-feathered corners (SDF approximation on DrawContext)
-        int baseAlpha = (color >>> 24) & 0xFF;
-        int rgb = color & 0x00FFFFFF;
-        for (int dy = 0; dy < r; dy++) {
-            float py = r - dy - 0.5f;
-            float dxExact = (float) Math.sqrt(Math.max(0.0f, r * r - py * py));
-            int dxInt = (int) dxExact;
-            float frac = dxExact - dxInt;
-
-            // Solid scanline segment inside arc
-            if (dxInt > 0) {
-                ctx.fill(ix + r - dxInt, iy + dy, ix + r, iy + dy + 1, color);
-                ctx.fill(ix + iw - r, iy + dy, ix + iw - r + dxInt, iy + dy + 1, color);
-                ctx.fill(ix + r - dxInt, iy + ih - 1 - dy, ix + r, iy + ih - dy, color);
-                ctx.fill(ix + iw - r, iy + ih - 1 - dy, ix + iw - r + dxInt, iy + ih - dy, color);
-            }
-            // Sub-pixel anti-aliased edge pixel
-            int aaAlpha = (int) (baseAlpha * frac);
-            if (aaAlpha > 4 && dxInt < r) {
-                int aaColor = (aaAlpha << 24) | rgb;
-                ctx.fill(ix + r - dxInt - 1, iy + dy, ix + r - dxInt, iy + dy + 1, aaColor);
-                ctx.fill(ix + iw - r + dxInt, iy + dy, ix + iw - r + dxInt + 1, iy + dy + 1, aaColor);
-                ctx.fill(ix + r - dxInt - 1, iy + ih - 1 - dy, ix + r - dxInt, iy + ih - dy, aaColor);
-                ctx.fill(ix + iw - r + dxInt, iy + ih - 1 - dy, ix + iw - r + dxInt + 1, iy + ih - dy, aaColor);
-            }
+        int b = Math.min(3, r);
+        ctx.fill(ix + b, iy, ix + iw - b, iy + ih, color);
+        ctx.fill(ix, iy + b, ix + b, iy + ih - b, color);
+        ctx.fill(ix + iw - b, iy + b, ix + iw, iy + ih - b, color);
+        if (b >= 2) {
+            ctx.fill(ix + 1, iy + 1, ix + b, iy + b, color);
+            ctx.fill(ix + iw - b, iy + 1, ix + iw - 1, iy + b, color);
+            ctx.fill(ix + 1, iy + ih - b, ix + b, iy + ih - 1, color);
+            ctx.fill(ix + iw - b, iy + ih - b, ix + iw - 1, iy + ih - 1, color);
         }
     }
 
     public static void drawRoundedBorder(DrawContext ctx, float x, float y, float w, float h, float radius, float thickness, int color) {
+        if (((color >>> 24) & 0xFF) <= 2) return;
         int ix = Math.round(x);
         int iy = Math.round(y);
         int iw = Math.round(w);
         int ih = Math.round(h);
-        int r = Math.min(Math.round(radius), Math.min(iw, ih) / 2);
+        if (iw <= 2 || ih <= 2) return;
 
-        // Straight edges
-        ctx.fill(ix + r, iy, ix + iw - r, iy + 1, color);
-        ctx.fill(ix + r, iy + ih - 1, ix + iw - r, iy + ih, color);
-        ctx.fill(ix, iy + r, ix + 1, iy + ih - r, color);
-        ctx.fill(ix + iw - 1, iy + r, ix + iw, iy + ih - r, color);
+        int b = radius > 1.5f ? 2 : 0;
+        ctx.fill(ix + b, iy, ix + iw - b, iy + 1, color);
+        ctx.fill(ix + b, iy + ih - 1, ix + iw - b, iy + ih, color);
+        ctx.fill(ix, iy + b, ix + 1, iy + ih - b, color);
+        ctx.fill(ix + iw - 1, iy + b, ix + iw, iy + ih - b, color);
 
-        // Corner arcs
-        for (int i = 0; i < r; i++) {
-            float py = r - i - 0.5f;
-            int dx = Math.round((float) Math.sqrt(Math.max(0.0f, r * r - py * py)));
-            ctx.fill(ix + r - dx, iy + i, ix + r - dx + 1, iy + i + 1, color);
-            ctx.fill(ix + iw - r + dx - 1, iy + i, ix + iw - r + dx, iy + i + 1, color);
-            ctx.fill(ix + r - dx, iy + ih - 1 - i, ix + r - dx + 1, iy + ih - i, color);
-            ctx.fill(ix + iw - r + dx - 1, iy + ih - 1 - i, ix + iw - r + dx, iy + ih - i, color);
+        if (b > 0) {
+            ctx.fill(ix + 1, iy + 1, ix + 2, iy + 2, color);
+            ctx.fill(ix + iw - 2, iy + 1, ix + iw - 1, iy + 2, color);
+            ctx.fill(ix + 1, iy + ih - 2, ix + 2, iy + ih - 1, color);
+            ctx.fill(ix + iw - 2, iy + ih - 2, ix + iw - 1, iy + ih - 1, color);
         }
     }
 
     public static void drawText(DrawContext ctx, String text, float x, float y, int color, float scale, boolean smallCaps, boolean shadow) {
         if (text == null || text.isEmpty()) return;
         TextRenderer tr = MinecraftClient.getInstance().textRenderer;
-        String rendered = smallCaps ? SmallCapsRenderer.toSmallCaps(text) : text;
+        String shaped = WorldLanguageShaper.shape(smallCaps ? SmallCapsRenderer.toSmallCaps(text) : text);
 
         Matrix3x2fStack matrices = ctx.getMatrices();
         matrices.pushMatrix();
@@ -142,7 +115,7 @@ public final class UIRenderer {
         if (Math.abs(scale - 1.0f) > 0.001f) {
             matrices.scale(scale, scale);
         }
-        ctx.drawText(tr, rendered, 0, 0, color, shadow);
+        ctx.drawText(tr, shaped, 0, 0, color, shadow);
         matrices.popMatrix();
     }
 

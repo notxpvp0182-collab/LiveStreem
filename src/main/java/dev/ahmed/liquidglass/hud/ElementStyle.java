@@ -13,7 +13,7 @@ public final class ElementStyle {
 
     public boolean borderEnabled = true;
     public int borderColor = 0x26FFFFFF;
-    public float borderOpacity = 0.15f;
+    public float borderOpacity = 0.65f;
     public float borderWidth = 1.0f;
     public float cornerRadius = 6.0f;
 

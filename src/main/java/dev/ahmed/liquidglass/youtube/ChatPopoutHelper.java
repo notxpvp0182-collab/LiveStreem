@@ -27,7 +27,7 @@ public final class ChatPopoutHelper {
     private static final Pattern SHORTCODE_PAT = Pattern.compile(":([a-zA-Z0-9_\\-]+):");
 
     private static final Map<String, String> EMOJI_MAP = Map.ofEntries(
-        Map.entry("red_heart", "❤"), Map.entry("heart", "❤"), Map.entry("orange_heart", "🧡"),
+        Map.entry("red_heart", "❤"), Map.entry("wilted_flower", "🥀"), Map.entry("wilted_rose", "🥀"), Map.entry("rose", "🌹"), Map.entry("smiling_imp", "😈"), Map.entry("imp", "👿"), Map.entry("smiling_face_with_horns", "😈"), Map.entry("Star-Struck", "🤩"), Map.entry("heart", "❤"), Map.entry("orange_heart", "🧡"),
         Map.entry("yellow_heart", "💛"), Map.entry("green_heart", "💚"), Map.entry("blue_heart", "💙"),
         Map.entry("purple_heart", "💜"), Map.entry("black_heart", "🖤"), Map.entry("white_heart", "🤍"),
         Map.entry("broken_heart", "💔"), Map.entry("sparkling_heart", "💖"), Map.entry("two_hearts", "💕"),

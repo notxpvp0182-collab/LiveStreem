@@ -36,13 +36,13 @@ public final class LiquidGlassClient implements ClientModInitializer {
         chatUpKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
             "key.liquidglass.chat_up",
             InputUtil.Type.KEYSYM,
-            GLFW.GLFW_KEY_PAGE_UP,
+            GLFW.GLFW_KEY_UP,
             category
         ));
         chatDownKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
             "key.liquidglass.chat_down",
             InputUtil.Type.KEYSYM,
-            GLFW.GLFW_KEY_PAGE_DOWN,
+            GLFW.GLFW_KEY_DOWN,
             category
         ));
 
@@ -61,27 +61,36 @@ public final class LiquidGlassClient implements ClientModInitializer {
                 }
             }
 
-            // Page Up: 1 click = scroll up, 2s hold (40 ticks) = continuous smooth scroll up
-            if (HudManager.get().isLiveChatEnabled() && chatUpKey.isPressed()) {
-                upHoldTicks++;
-                if (upHoldTicks == 1) {
-                    LiveChatElement.scrollUp(2);
-                } else if (upHoldTicks >= 40 && upHoldTicks % 2 == 0) {
-                    LiveChatElement.scrollUp(1);
+            if (HudManager.get().isLiveChatEnabled() && client.getWindow() != null) {
+                long handle = client.getWindow().getHandle();
+                boolean upPressed = chatUpKey.isPressed()
+                    || (client.currentScreen == null && GLFW.glfwGetKey(handle, GLFW.GLFW_KEY_UP) == GLFW.GLFW_PRESS);
+                boolean downPressed = chatDownKey.isPressed()
+                    || (client.currentScreen == null && GLFW.glfwGetKey(handle, GLFW.GLFW_KEY_DOWN) == GLFW.GLFW_PRESS);
+
+                if (upPressed) {
+                    upHoldTicks++;
+                    if (upHoldTicks == 1) {
+                        LiveChatElement.scrollUp(2);
+                    } else if (upHoldTicks >= 40 && upHoldTicks % 2 == 0) {
+                        LiveChatElement.scrollUp(1);
+                    }
+                } else {
+                    upHoldTicks = 0;
+                }
+
+                if (downPressed) {
+                    downHoldTicks++;
+                    if (downHoldTicks == 1) {
+                        LiveChatElement.scrollDown(2);
+                    } else if (downHoldTicks == 40) {
+                        LiveChatElement.jumpToLiveBottom();
+                    }
+                } else {
+                    downHoldTicks = 0;
                 }
             } else {
                 upHoldTicks = 0;
-            }
-
-            // Page Down: 1 click = scroll down, 2s hold (40 ticks) = jump straight to live chat bottom
-            if (HudManager.get().isLiveChatEnabled() && chatDownKey.isPressed()) {
-                downHoldTicks++;
-                if (downHoldTicks == 1) {
-                    LiveChatElement.scrollDown(2);
-                } else if (downHoldTicks == 40) {
-                    LiveChatElement.jumpToLiveBottom();
-                }
-            } else {
                 downHoldTicks = 0;
             }
         });

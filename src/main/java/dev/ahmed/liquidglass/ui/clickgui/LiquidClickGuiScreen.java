@@ -5,9 +5,12 @@ import dev.ahmed.liquidglass.hud.HudEditorScreen;
 import dev.ahmed.liquidglass.hud.HudElement;
 import dev.ahmed.liquidglass.hud.HudManager;
 import dev.ahmed.liquidglass.hud.elements.LiveChatElement;
+import dev.ahmed.liquidglass.stream.StreamManager;
 import dev.ahmed.liquidglass.ui.animation.Animation;
+import dev.ahmed.liquidglass.ui.components.GlassSlider;
 import dev.ahmed.liquidglass.ui.components.GlassToggle;
 import dev.ahmed.liquidglass.ui.debug.DebugOverlay;
+import dev.ahmed.liquidglass.ui.render.IconRenderer;
 import dev.ahmed.liquidglass.ui.render.UIRenderer;
 import dev.ahmed.liquidglass.ui.theme.ThemeManager;
 import dev.ahmed.liquidglass.ui.theme.ThemeTokens;
@@ -24,32 +27,57 @@ import java.util.List;
 
 public final class LiquidClickGuiScreen extends Screen {
     public enum Category {
-        STREAM("Stream"), HUD("HUD"), CHANNEL("Channel"), CHAT("Chat"), THEME("Theme");
+        STREAM("Stream", IconRenderer.Icon.LIVE),
+        HUD("HUD", IconRenderer.Icon.DISPLAY),
+        CHANNEL("Channel", IconRenderer.Icon.PROFILE),
+        CHAT("Chat", IconRenderer.Icon.CHAT),
+        THEME("Theme", IconRenderer.Icon.SLIDERS);
+
         private final String title;
-        Category(String title) { this.title = title; }
+        private final IconRenderer.Icon icon;
+        Category(String title, IconRenderer.Icon icon) {
+            this.title = title;
+            this.icon = icon;
+        }
         public String title() { return title; }
+        public IconRenderer.Icon icon() { return icon; }
     }
 
     private final Animation openAnim = new Animation(0.0f, 0.24f, Animation.Easing.EASE_OUT_QUART);
     private final Animation expandAnim = new Animation(0.0f, 0.22f, Animation.Easing.EASE_OUT_CUBIC);
+    private final Animation panelSwitchAnim = new Animation(1.0f, 0.22f, Animation.Easing.EASE_OUT_QUART);
     private final Animation[] cardHoverAnims = new Animation[Category.values().length];
+    private final Animation[] cardXAnims = new Animation[Category.values().length];
+    private boolean cardPositionsInitialized = false;
 
     private Category selectedCategory = null;
     private boolean closing = false;
     private long lastFrameNs = System.nanoTime();
     private float scrollOffset = 0.0f;
     private final List<GlassToggle> activeToggles = new ArrayList<>();
+    private final List<GlassSlider> activeSliders = new ArrayList<>();
 
     public LiquidClickGuiScreen() {
         super(Text.literal("LiveStream GUI"));
-        for (int i = 0; i < cardHoverAnims.length; i++) {
-            cardHoverAnims[i] = new Animation(0.0f, 0.16f, Animation.Easing.EASE_OUT_CUBIC);
+        for (int i = 0; i < Category.values().length; i++) {
+            cardHoverAnims[i] = new Animation(0.0f, 0.15f, Animation.Easing.EASE_OUT_CUBIC);
+            cardXAnims[i] = new Animation(0.0f, 0.24f, Animation.Easing.EASE_OUT_QUART);
         }
         openAnim.animateTo(1.0f);
     }
 
-    private void rebuildCategoryToggles(Category cat) {
+    private void selectCategoryWithAnimation(Category cat) {
+        this.selectedCategory = cat;
+        this.scrollOffset = 0.0f;
+        this.panelSwitchAnim.animateTo(0.0f);
+        this.panelSwitchAnim.update(1.0f);
+        this.panelSwitchAnim.animateTo(1.0f);
+        rebuildCategoryControls(cat);
+    }
+
+    private void rebuildCategoryControls(Category cat) {
         activeToggles.clear();
+        activeSliders.clear();
         if (cat == null) return;
         switch (cat) {
             case HUD -> {
@@ -76,13 +104,22 @@ public final class LiquidClickGuiScreen extends Screen {
                 for (HudElement el : HudManager.get().elements()) {
                     if (el instanceof LiveChatElement chat) {
                         activeToggles.add(new GlassToggle("Enable Live Chat", chat::isEnabled, chat::setEnabled));
-                        activeToggles.add(new GlassToggle("Show Username", () -> chat.showUsername, v -> chat.showUsername = v));
-                        activeToggles.add(new GlassToggle("Show Timestamp", () -> chat.showTimestamp, v -> chat.showTimestamp = v));
-                        activeToggles.add(new GlassToggle("Emoji Fallback", () -> chat.enableEmojiFallback, v -> chat.enableEmojiFallback = v));
-                        activeToggles.add(new GlassToggle("Small Caps Text", () -> chat.style().smallCaps, v -> chat.style().smallCaps = v));
+                        activeSliders.add(new GlassSlider("Chat Delay", 0.0, 2.0, 0.1, "s",
+                            () -> StreamManager.get().chatDelayMs() / 1000.0,
+                            sec -> StreamManager.get().setChatDelayMs((int) Math.round(sec * 1000.0))));
+                        activeSliders.add(new GlassSlider("Chat Text Size", 0.7, 1.8, 0.1, "x",
+                            () -> chat.style().scale,
+                            val -> chat.style().scale = (float) val));
+                        activeToggles.add(new GlassToggle("Newest Chat at Top", () -> chat.newestAtTop, v -> chat.newestAtTop = v));
+                        activeToggles.add(new GlassToggle("YouTube Icon Badge", () -> chat.showYouTubeIcon, v -> chat.showYouTubeIcon = v));
+                        activeToggles.add(new GlassToggle("Chat Nametag Shadow", () -> chat.chatShadow, v -> chat.chatShadow = v));
+                        activeToggles.add(new GlassToggle("Text Drop Shadow", () -> chat.textShadow, v -> chat.textShadow = v));
                         activeToggles.add(new GlassToggle("Colored Usernames", () -> chat.coloredUsernames, v -> chat.coloredUsernames = v));
                         activeToggles.add(new GlassToggle("Multi-Color Chat", () -> chat.coloredMessages, v -> chat.coloredMessages = v));
                         activeToggles.add(new GlassToggle("RGB Chroma Mode", () -> chat.rgbMode, v -> chat.rgbMode = v));
+                        activeToggles.add(new GlassToggle("Show Timestamp", () -> chat.showTimestamp, v -> chat.showTimestamp = v));
+                        activeToggles.add(new GlassToggle("Show Username", () -> chat.showUsername, v -> chat.showUsername = v));
+                        activeToggles.add(new GlassToggle("Chat Box Frame", () -> chat.style().backgroundEnabled, v -> chat.style().backgroundEnabled = v));
                     }
                 }
             }
@@ -114,10 +151,11 @@ public final class LiquidClickGuiScreen extends Screen {
         ThemeTokens t = ThemeManager.get().tokens();
         expandAnim.animateTo(selectedCategory != null ? 1.0f : 0.0f);
         float expand = expandAnim.update(dt);
+        float switchAnim = panelSwitchAnim.update(dt);
 
-        ctx.fill(0, 0, this.width, this.height, UIRenderer.withAlpha(t.bgOverlay(), (int) (185 * openProgress)));
+        ctx.fill(0, 0, this.width, this.height, UIRenderer.withAlpha(t.bgOverlay(), (int) (175 * openProgress)));
 
-        float scale = 0.98f + 0.02f * openProgress;
+        float scale = 0.96f + 0.04f * openProgress;
         Matrix3x2fStack matrices = ctx.getMatrices();
         matrices.pushMatrix();
         matrices.translate(this.width * 0.5f, this.height * 0.5f);
@@ -140,21 +178,33 @@ public final class LiquidClickGuiScreen extends Screen {
         float startX = centerX - totalRowW * 0.5f;
         float cardY = centerY - cardH * 0.5f;
 
-        int selIndex = selectedCategory != null ? selectedCategory.ordinal() : cats.length / 2;
+        int selIndex = selectedCategory != null ? selectedCategory.ordinal() : -1;
+
         for (int i = 0; i < cats.length; i++) {
             float baseCx = startX + i * (cardW + gap);
-            float cx = baseCx;
-            if (expand > 0.001f && selectedCategory != null && i != selIndex) {
-                int remIdx = (i < selIndex) ? i : (i - 1);
-                int slot = (remIdx < 2) ? remIdx : (remIdx + 1);
-                float targetCx = startX + slot * (cardW + gap) + (remIdx < 2 ? -105.0f : 105.0f);
-                cx = baseCx + (targetCx - baseCx) * expand;
+            float targetCx = baseCx;
+            if (selectedCategory != null) {
+                if (i == selIndex) {
+                    targetCx = centerX - cardW * 0.5f;
+                } else {
+                    int remIdx = (i < selIndex) ? i : (i - 1);
+                    int slot = (remIdx < 2) ? remIdx : (remIdx + 1);
+                    targetCx = startX + slot * (cardW + gap) + (remIdx < 2 ? -105.0f : 105.0f);
+                }
             }
+
+            if (!cardPositionsInitialized) {
+                cardXAnims[i] = new Animation(targetCx, 0.24f, Animation.Easing.EASE_OUT_QUART);
+            } else {
+                cardXAnims[i].animateTo(targetCx);
+            }
+            float cx = cardXAnims[i].update(dt);
+
             boolean hovered = mouseX >= cx && mouseX <= cx + cardW && mouseY >= cardY && mouseY <= cardY + cardH;
             cardHoverAnims[i].animateTo(hovered ? 1.0f : 0.0f);
             float hv = cardHoverAnims[i].update(dt);
 
-            if (selectedCategory == cats[i] && expand > 0.25f) {
+            if (selectedCategory == cats[i] && expand > 0.20f) {
                 continue;
             }
 
@@ -169,6 +219,9 @@ public final class LiquidClickGuiScreen extends Screen {
                 hv, mouseX, mouseY
             );
 
+            int iconColor = UIRenderer.lerpColor(t.textSecondary(), t.accentActive(), hv);
+            IconRenderer.drawIcon(ctx, cats[i].icon(), cx + (cardW - 14) * 0.5f, cardY + 18, 14, iconColor);
+
             String label = cats[i].title();
             int lw = this.textRenderer.getWidth(label);
             UIRenderer.drawText(ctx, label, cx + (cardW - lw) * 0.5f, cardY + cardH - 22,
@@ -177,29 +230,31 @@ public final class LiquidClickGuiScreen extends Screen {
                      Math.round(cx + cardW * 0.65f), Math.round(cardY + cardH - 9),
                      UIRenderer.lerpColor(t.textMuted(), t.accentPrimary(), hv));
         }
+        cardPositionsInitialized = true;
 
-        // Bottom Dock Buttons (Connect Stream & Edit HUD)
-        float dockY = centerY + 54 + expand * 72;
+        float dockY = centerY + 54 + expand * 74;
         drawDockButton(ctx, centerX - 105, dockY, 100, 22, "Stream Connect", mouseX, mouseY);
         drawDockButton(ctx, centerX + 5, dockY, 100, 22, "Edit HUD", mouseX, mouseY);
 
         if (expand > 0.01f && selectedCategory != null) {
-            float panelW = 220.0f;
-            float panelH = 230.0f * expand;
+            float effectiveAnim = expand * (0.85f + 0.15f * switchAnim);
+            float panelW = 228.0f;
+            float panelH = 236.0f * effectiveAnim;
             float px = centerX - panelW * 0.5f;
-            float py = centerY - panelH * 0.5f;
+            float py = centerY - panelH * 0.5f + (1.0f - switchAnim) * 8.0f;
 
             UIRenderer.drawGlassPanel(ctx, px, py, panelW, panelH, t.radiusLarge(),
                 t.bgGlassStrong(), t.borderActive(), 0.4f, mouseX, mouseY);
 
             ctx.enableScissor(Math.round(px), Math.round(py), Math.round(px + panelW), Math.round(py + panelH));
 
+            IconRenderer.drawIcon(ctx, selectedCategory.icon(), centerX - 5, py + 7, 10, t.accentPrimary());
             String catTitle = selectedCategory.title();
             int ctw = this.textRenderer.getWidth(catTitle);
-            UIRenderer.drawText(ctx, catTitle, centerX - ctw * 0.5f, py + 14, t.textPrimary(), 1.0f, false, false);
+            UIRenderer.drawText(ctx, catTitle, centerX - ctw * 0.5f, py + 19, t.textPrimary(), 1.0f, false, false);
 
             float btnX = px + 10;
-            float btnY = py + 32;
+            float btnY = py + 34;
             float btnW = panelW - 20;
             float btnH = 18;
             boolean editHover = mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
@@ -211,11 +266,15 @@ public final class LiquidClickGuiScreen extends Screen {
             UIRenderer.drawText(ctx, topBtnText, centerX - this.textRenderer.getWidth(topBtnText) * 0.5f,
                 btnY + 5, t.textPrimary(), 1.0f, false, false);
 
-            float listTop = py + 56;
+            float listTop = py + 58;
             float listBottom = py + panelH - 8;
             ctx.enableScissor(Math.round(px + 6), Math.round(listTop), Math.round(px + panelW - 6), Math.round(listBottom));
 
             float rowY = listTop - scrollOffset;
+            for (GlassSlider slider : activeSliders) {
+                slider.render(ctx, px + 10, rowY, panelW - 20, 24, mouseX, mouseY, dt);
+                rowY += 28;
+            }
             for (GlassToggle toggle : activeToggles) {
                 toggle.render(ctx, px + 10, rowY, panelW - 20, 22, mouseX, mouseY, dt);
                 rowY += 26;
@@ -246,9 +305,8 @@ public final class LiquidClickGuiScreen extends Screen {
         float centerX = this.width * 0.5f;
         float centerY = this.height * 0.5f;
         float expand = expandAnim.value();
-        float dockY = centerY + 54 + expand * 72;
+        float dockY = centerY + 54 + expand * 74;
 
-        // Bottom Dock Clicks
         if (button == 0 && my >= dockY && my <= dockY + 22) {
             if (mx >= centerX - 105 && mx <= centerX - 5) {
                 if (this.client != null) this.client.setScreen(new WorkspaceModalScreen(this));
@@ -260,46 +318,53 @@ public final class LiquidClickGuiScreen extends Screen {
             }
         }
 
+        Category[] cats = Category.values();
+        float cardW = 68.0f;
+        float cardH = 74.0f;
+        float cardY = centerY - cardH * 0.5f;
+
         if (selectedCategory != null) {
-            float panelW = 220.0f;
-            float panelH = 230.0f;
+            float panelW = 228.0f;
+            float panelH = 236.0f;
             float px = centerX - panelW * 0.5f;
             float py = centerY - panelH * 0.5f;
 
-            if (button == 0 && mx >= px + 10 && mx <= px + panelW - 10 && my >= py + 32 && my <= py + 50) {
+            if (button == 0 && mx >= px + 10 && mx <= px + panelW - 10 && my >= py + 34 && my <= py + 52) {
                 if (this.client != null) {
                     this.client.setScreen(new HudEditorScreen(this));
                 }
                 return true;
             }
 
-            float rowY = py + 56 - scrollOffset;
-            for (GlassToggle toggle : activeToggles) {
-                if (toggle.mouseClicked(mx, my, button, px + 10, rowY, panelW - 20, 22)) {
-                    return true;
+            float listTop = py + 58;
+            float listBottom = py + panelH - 8;
+            if (my >= listTop && my <= listBottom) {
+                float rowY = listTop - scrollOffset;
+                for (GlassSlider slider : activeSliders) {
+                    if (slider.mouseClicked(mx, my, button, px + 10, rowY, panelW - 20, 24)) {
+                        return true;
+                    }
+                    rowY += 28;
                 }
-                rowY += 26;
+                for (GlassToggle toggle : activeToggles) {
+                    if (toggle.mouseClicked(mx, my, button, px + 10, rowY, panelW - 20, 22)) {
+                        return true;
+                    }
+                    rowY += 26;
+                }
             }
 
+            // Check clicks on the 4 side cards (2 left, 2 right) with smooth transition animation
             if (mx < px || mx > px + panelW || my < py || my > py + panelH) {
-                Category[] cats = Category.values();
-                float cardW = 68.0f, cardH = 74.0f, gap = 10.0f;
-                float startX = centerX - (cats.length * cardW + (cats.length - 1) * gap) * 0.5f;
-                float cardY = centerY - cardH * 0.5f;
-                int selIdx = selectedCategory.ordinal();
                 for (int i = 0; i < cats.length; i++) {
-                    if (i == selIdx) continue;
-                    int remIdx = (i < selIdx) ? i : (i - 1);
-                    int slot = (remIdx < 2) ? remIdx : (remIdx + 1);
-                    float cx = startX + slot * (cardW + gap) + (remIdx < 2 ? -105.0f : 105.0f);
+                    if (cats[i] == selectedCategory) continue;
+                    float cx = cardXAnims[i].value();
                     if (button == 0 && mx >= cx && mx <= cx + cardW && my >= cardY && my <= cardY + cardH) {
                         if (cats[i] == Category.STREAM) {
                             if (this.client != null) this.client.setScreen(new WorkspaceModalScreen(this));
                             return true;
                         }
-                        selectedCategory = cats[i];
-                        scrollOffset = 0.0f;
-                        rebuildCategoryToggles(selectedCategory);
+                        selectCategoryWithAnimation(cats[i]);
                         return true;
                     }
                 }
@@ -307,24 +372,14 @@ public final class LiquidClickGuiScreen extends Screen {
                 return true;
             }
         } else {
-            Category[] cats = Category.values();
-            float cardW = 68.0f;
-            float cardH = 74.0f;
-            float gap = 10.0f;
-            float totalRowW = cats.length * cardW + (cats.length - 1) * gap;
-            float startX = centerX - totalRowW * 0.5f;
-            float cardY = centerY - cardH * 0.5f;
-
             for (int i = 0; i < cats.length; i++) {
-                float cx = startX + i * (cardW + gap);
+                float cx = cardXAnims[i].value();
                 if (button == 0 && mx >= cx && mx <= cx + cardW && my >= cardY && my <= cardY + cardH) {
                     if (cats[i] == Category.STREAM) {
                         if (this.client != null) this.client.setScreen(new WorkspaceModalScreen(this));
                         return true;
                     }
-                    selectedCategory = cats[i];
-                    scrollOffset = 0.0f;
-                    rebuildCategoryToggles(selectedCategory);
+                    selectCategoryWithAnimation(cats[i]);
                     return true;
                 }
             }
@@ -333,9 +388,32 @@ public final class LiquidClickGuiScreen extends Screen {
     }
 
     @Override
+    public boolean mouseDragged(Click click, double offsetX, double offsetY) {
+        if (selectedCategory != null) {
+            float panelW = 228.0f;
+            float px = this.width * 0.5f - panelW * 0.5f;
+            for (GlassSlider slider : activeSliders) {
+                if (slider.mouseDragged(click.x(), px + 10, panelW - 20)) {
+                    return true;
+                }
+            }
+        }
+        return super.mouseDragged(click, offsetX, offsetY);
+    }
+
+    @Override
+    public boolean mouseReleased(Click click) {
+        for (GlassSlider slider : activeSliders) {
+            slider.mouseReleased();
+        }
+        return super.mouseReleased(click);
+    }
+
+    @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
         if (selectedCategory != null) {
-            float maxScroll = Math.max(0.0f, activeToggles.size() * 26.0f - 160.0f);
+            float contentH = activeSliders.size() * 28.0f + activeToggles.size() * 26.0f;
+            float maxScroll = Math.max(0.0f, contentH - 165.0f);
             scrollOffset = Math.max(0.0f, Math.min(maxScroll, scrollOffset - (float) verticalAmount * 18.0f));
             return true;
         }

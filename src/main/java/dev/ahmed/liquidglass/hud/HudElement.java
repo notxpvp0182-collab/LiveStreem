@@ -1,5 +1,6 @@
 package dev.ahmed.liquidglass.hud;
 
+import dev.ahmed.liquidglass.hud.elements.LiveChatElement;
 import dev.ahmed.liquidglass.ui.render.UIRenderer;
 import net.minecraft.client.gui.DrawContext;
 
@@ -12,9 +13,9 @@ public abstract class HudElement {
     private float y;
     private float width;
     private float height;
+    private final float baseHeight;
     private final float minWidth;
     private final float minHeight;
-    private int zIndex = 0;
     private final ElementStyle style = new ElementStyle();
 
     protected HudElement(String id, String displayName, float x, float y, float width, float height, boolean enabled) {
@@ -24,8 +25,9 @@ public abstract class HudElement {
         this.y = y;
         this.width = width;
         this.height = height;
-        this.minWidth = Math.max(36.0f, width * 0.5f);
-        this.minHeight = Math.max(16.0f, height * 0.5f);
+        this.baseHeight = Math.max(16.0f, height);
+        this.minWidth = Math.max(36.0f, width * 0.45f);
+        this.minHeight = Math.max(14.0f, height * 0.55f);
         this.enabled = enabled;
     }
 
@@ -38,6 +40,9 @@ public abstract class HudElement {
                 ? UIRenderer.withAlpha(style.borderColor, (int) (style.borderOpacity * 255))
                 : 0x00000000;
             UIRenderer.drawGlassPanel(ctx, x, y, width, height, style.cornerRadius, bg, border, 0.0f, mouseX, mouseY);
+        } else if (style.borderEnabled) {
+            int border = UIRenderer.withAlpha(style.borderColor, (int) (style.borderOpacity * 255));
+            UIRenderer.drawRoundedBorder(ctx, x, y, width, height, style.cornerRadius, style.borderWidth, border);
         }
         renderContent(ctx);
     }
@@ -48,6 +53,10 @@ public abstract class HudElement {
         if (!locked) {
             this.width = Math.max(minWidth, newW);
             this.height = Math.max(minHeight, newH);
+            // Automatically scale text size proportionally when resizing metric HUD elements
+            if (!(this instanceof LiveChatElement)) {
+                this.style.scale = Math.max(0.65f, Math.min(2.6f, this.height / this.baseHeight));
+            }
         }
     }
 

@@ -21,7 +21,6 @@ import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
 import java.util.Map;
 
-/** Persists everything to config/liquidglass.json using an atomic write. */
 public final class ConfigManager {
     private static final Logger LOGGER = LoggerFactory.getLogger("LiquidGlass/Config");
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -35,24 +34,29 @@ public final class ConfigManager {
     }
 
     public static final class ChatSettings {
-        public int maxVisibleMessages = 10;
+        public int maxVisibleMessages = 14;
+        public boolean showYouTubeIcon = true;
         public boolean showUsername = true;
-        public boolean showTimestamp = true;
+        public boolean showTimestamp = false;
         public boolean enableEmojiFallback = true;
-        public float lineSpacing = 12.0f;
+        public float lineSpacing = 12.5f;
         public boolean coloredUsernames = true;
         public boolean coloredMessages = false;
         public boolean rgbMode = false;
+        public boolean newestAtTop = false;
+        public boolean chatShadow = true;
+        public boolean textShadow = true;
+        public int chatDelayMs = 0;
     }
 
     public static final class ConfigPayload {
         public String themeId = "dark_liquid_glass";
-        public String glassQuality = "HIGH";
+        public String glassQuality = "ULTRA";
         public String activeHudProfile = "Default";
         public String youtubeUrl = "";
         public String youtubeApiKey = "";
         public boolean autoConnect = false;
-        public int streamRefreshSec = 30;
+        public int streamRefreshSec = 25;
         public int maxChatHistory = 500;
         public ChatSettings chat = new ChatSettings();
         public Map<String, SavedHudEntry> hudElements = new HashMap<>();
@@ -92,23 +96,26 @@ public final class ConfigManager {
             try {
                 ThemeManager.get().setQuality(GlassQuality.valueOf(data.glassQuality));
             } catch (IllegalArgumentException | NullPointerException ignored) {
-                // keep default quality
+                ThemeManager.get().setQuality(GlassQuality.ULTRA);
             }
             StreamManager.get().setRefreshIntervalSec(data.streamRefreshSec);
             StreamManager.get().setMaxChatHistory(data.maxChatHistory);
+            StreamManager.get().setChatDelayMs(data.chat.chatDelayMs);
             HudManager.get().setActiveProfileName(data.activeHudProfile);
 
             for (HudElement el : HudManager.get().elements()) {
                 SavedHudEntry saved = data.hudElements.get(el.id());
-                if (saved == null) continue;
-                el.setEnabled(saved.enabled);
-                el.setLocked(false);
-                el.setPosition(saved.x, saved.y);
-                el.resize(saved.width, saved.height);
-                el.setLocked(saved.locked);
-                if (saved.style != null) el.style().copyFrom(saved.style);
+                if (saved != null) {
+                    el.setEnabled(saved.enabled);
+                    el.setLocked(false);
+                    el.setPosition(saved.x, saved.y);
+                    el.resize(saved.width, saved.height);
+                    el.setLocked(saved.locked);
+                    if (saved.style != null) el.style().copyFrom(saved.style);
+                }
                 if (el instanceof LiveChatElement chat) {
                     chat.maxVisibleMessages = Math.max(1, Math.min(40, data.chat.maxVisibleMessages));
+                    chat.showYouTubeIcon = data.chat.showYouTubeIcon;
                     chat.showUsername = data.chat.showUsername;
                     chat.showTimestamp = data.chat.showTimestamp;
                     chat.enableEmojiFallback = data.chat.enableEmojiFallback;
@@ -116,6 +123,9 @@ public final class ConfigManager {
                     chat.coloredUsernames = data.chat.coloredUsernames;
                     chat.coloredMessages = data.chat.coloredMessages;
                     chat.rgbMode = data.chat.rgbMode;
+                    chat.newestAtTop = data.chat.newestAtTop;
+                    chat.chatShadow = data.chat.chatShadow;
+                    chat.textShadow = data.chat.textShadow;
                 }
             }
         } catch (Exception e) {
@@ -130,6 +140,7 @@ public final class ConfigManager {
             current.activeHudProfile = HudManager.get().activeProfile();
             current.streamRefreshSec = StreamManager.get().refreshIntervalSec();
             current.maxChatHistory = StreamManager.get().maxChatHistory();
+            current.chat.chatDelayMs = StreamManager.get().chatDelayMs();
             current.hudElements = new HashMap<>();
             for (HudElement el : HudManager.get().elements()) {
                 SavedHudEntry entry = new SavedHudEntry();
@@ -143,6 +154,7 @@ public final class ConfigManager {
                 current.hudElements.put(el.id(), entry);
                 if (el instanceof LiveChatElement chat) {
                     current.chat.maxVisibleMessages = chat.maxVisibleMessages;
+                    current.chat.showYouTubeIcon = chat.showYouTubeIcon;
                     current.chat.showUsername = chat.showUsername;
                     current.chat.showTimestamp = chat.showTimestamp;
                     current.chat.enableEmojiFallback = chat.enableEmojiFallback;
@@ -150,6 +162,9 @@ public final class ConfigManager {
                     current.chat.coloredUsernames = chat.coloredUsernames;
                     current.chat.coloredMessages = chat.coloredMessages;
                     current.chat.rgbMode = chat.rgbMode;
+                    current.chat.newestAtTop = chat.newestAtTop;
+                    current.chat.chatShadow = chat.chatShadow;
+                    current.chat.textShadow = chat.textShadow;
                 }
             }
             Files.createDirectories(configFile.getParent());

@@ -11,6 +11,8 @@ import net.minecraft.client.input.KeyInput;
 import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
 
+import java.util.Locale;
+
 public final class HudEditorScreen extends Screen {
     private final Screen parent;
     private HudElement selectedElement = null;
@@ -37,29 +39,67 @@ public final class HudEditorScreen extends Screen {
             el.renderElement(ctx, mouseX, mouseY, true);
 
             boolean isSel = (el == selectedElement || el == inspectorElement);
-            int outline = isSel ? t.borderActive() : 0x33FFFFFF;
-            UIRenderer.drawRoundedBorder(ctx, el.x() - 1, el.y() - 1, el.width() + 2, el.height() + 2,
-                el.style().cornerRadius + 1, 1.0f, outline);
-
-            if (isSel && !el.isLocked()) {
-                UIRenderer.drawRoundedRect(ctx, el.x() + el.width() - 4, el.y() + el.height() - 4, 6, 6, 2, t.accentPrimary());
+            if (isSel) {
+                UIRenderer.drawRoundedBorder(ctx, el.x() - 1, el.y() - 1, el.width() + 2, el.height() + 2,
+                    el.style().cornerRadius + 1, 1.0f, t.borderActive());
+                if (!el.isLocked()) {
+                    UIRenderer.drawRoundedRect(ctx, el.x() + el.width() - 5, el.y() + el.height() - 5, 6, 6, 2, t.accentPrimary());
+                }
             }
         }
 
         if (inspectorElement != null) {
-            float ix = Math.min(this.width - 175, inspectorElement.x() + inspectorElement.width() + 8);
-            float iy = Math.max(10, Math.min(this.height - 150, inspectorElement.y()));
-            UIRenderer.drawGlassPanel(ctx, ix, iy, 165, 138, t.radiusMedium(),
-                t.bgGlassStrong(), t.borderActive(), 0.2f, mouseX, mouseY);
+            float dw = 152.0f;
+            float dh = 148.0f;
+            float ix = Math.min(this.width - dw - 8, inspectorElement.x() + inspectorElement.width() + 8);
+            if (ix < 8) ix = 8;
+            float iy = Math.max(8, Math.min(this.height - dh - 8, inspectorElement.y()));
 
-            UIRenderer.drawText(ctx, inspectorElement.displayName() + " Settings", ix + 8, iy + 8, t.textPrimary(), 1.0f, false, false);
-            UIRenderer.drawText(ctx, "[1] Enabled: " + (inspectorElement.isEnabled() ? "ON" : "OFF"), ix + 8, iy + 26, t.textSecondary(), 1.0f, false, false);
-            UIRenderer.drawText(ctx, "[2] Small Caps: " + (inspectorElement.style().smallCaps ? "ON" : "OFF"), ix + 8, iy + 42, t.textSecondary(), 1.0f, false, false);
-            UIRenderer.drawText(ctx, "[3] Background: " + (inspectorElement.style().backgroundEnabled ? "ON" : "OFF"), ix + 8, iy + 58, t.textSecondary(), 1.0f, false, false);
-            UIRenderer.drawText(ctx, "[4] Border: " + (inspectorElement.style().borderEnabled ? "ON" : "OFF"), ix + 8, iy + 74, t.textSecondary(), 1.0f, false, false);
-            UIRenderer.drawText(ctx, "[5] Locked: " + (inspectorElement.isLocked() ? "YES" : "NO"), ix + 8, iy + 90, t.textSecondary(), 1.0f, false, false);
-            UIRenderer.drawText(ctx, "Scroll: Radius (" + Math.round(inspectorElement.style().cornerRadius) + "px)", ix + 8, iy + 110, t.textMuted(), 1.0f, false, false);
+            UIRenderer.drawGlassPanel(ctx, ix, iy, dw, dh, t.radiusMedium(),
+                t.bgGlassStrong(), t.borderActive(), 0.25f, mouseX, mouseY);
+
+            UIRenderer.drawText(ctx, inspectorElement.displayName(), ix + 8, iy + 7, t.textPrimary(), 0.95f, false, true);
+
+            float bw = (dw - 18) * 0.5f;
+            drawMiniPill(ctx, ix + 6, iy + 22, bw, 16, "Show: " + (inspectorElement.isEnabled() ? "ON" : "OFF"),
+                inspectorElement.isEnabled(), mouseX, mouseY);
+            drawMiniPill(ctx, ix + 12 + bw, iy + 22, bw, 16, "Lock: " + (inspectorElement.isLocked() ? "ON" : "OFF"),
+                inspectorElement.isLocked(), mouseX, mouseY);
+
+            drawMiniPill(ctx, ix + 6, iy + 42, bw, 16, "Bg: " + (inspectorElement.style().backgroundEnabled ? "ON" : "OFF"),
+                inspectorElement.style().backgroundEnabled, mouseX, mouseY);
+            drawMiniPill(ctx, ix + 12 + bw, iy + 42, bw, 16, "Border: " + (inspectorElement.style().borderEnabled ? "ON" : "OFF"),
+                inspectorElement.style().borderEnabled, mouseX, mouseY);
+
+            drawMiniPill(ctx, ix + 6, iy + 62, bw, 16, "Caps: " + (inspectorElement.style().smallCaps ? "ON" : "OFF"),
+                inspectorElement.style().smallCaps, mouseX, mouseY);
+            drawMiniPill(ctx, ix + 12 + bw, iy + 62, bw, 16, "Anim: " + (inspectorElement.style().animationEnabled ? "ON" : "OFF"),
+                inspectorElement.style().animationEnabled, mouseX, mouseY);
+
+            String scaleLabel = String.format(Locale.ROOT, "Text Size: %.1fx", inspectorElement.style().scale);
+            UIRenderer.drawText(ctx, scaleLabel, ix + 8, iy + 86, t.textSecondary(), 0.85f, false, false);
+            drawMiniPill(ctx, ix + dw - 44, iy + 83, 16, 14, "-", false, mouseX, mouseY);
+            drawMiniPill(ctx, ix + dw - 24, iy + 83, 16, 14, "+", false, mouseX, mouseY);
+
+            String radLabel = "Corner: " + Math.round(inspectorElement.style().cornerRadius) + "px";
+            UIRenderer.drawText(ctx, radLabel, ix + 8, iy + 106, t.textSecondary(), 0.85f, false, false);
+            drawMiniPill(ctx, ix + dw - 44, iy + 103, 16, 14, "-", false, mouseX, mouseY);
+            drawMiniPill(ctx, ix + dw - 24, iy + 103, 16, 14, "+", false, mouseX, mouseY);
+
+            drawMiniPill(ctx, ix + 6, iy + 124, dw - 12, 16, "Reset Scale (1.0x)", false, mouseX, mouseY);
         }
+    }
+
+    private void drawMiniPill(DrawContext ctx, float x, float y, float w, float h, String text, boolean active, int mx, int my) {
+        ThemeTokens t = ThemeManager.get().tokens();
+        boolean hover = mx >= x && mx <= x + w && my >= y && my <= y + h;
+        int fill = active ? UIRenderer.withAlpha(t.accentPrimary(), 55) : (hover ? t.bgGlassStrong() : t.bgElevated());
+        int border = active ? t.borderActive() : (hover ? t.borderActive() : t.borderBase());
+        UIRenderer.drawRoundedRect(ctx, x, y, w, h, 3.5f, fill);
+        UIRenderer.drawRoundedBorder(ctx, x, y, w, h, 3.5f, 1.0f, border);
+        float tw = this.textRenderer.getWidth(text) * 0.85f;
+        UIRenderer.drawText(ctx, text, x + (w - tw) * 0.5f, y + (h - 7) * 0.5f,
+            active ? t.textPrimary() : t.textSecondary(), 0.85f, false, false);
     }
 
     @Override
@@ -69,14 +109,25 @@ public final class HudEditorScreen extends Screen {
         int btn = click.button();
 
         if (inspectorElement != null && btn == 0) {
-            float ix = Math.min(this.width - 175, inspectorElement.x() + inspectorElement.width() + 8);
-            float iy = Math.max(10, Math.min(this.height - 150, inspectorElement.y()));
-            if (mx >= ix && mx <= ix + 165 && my >= iy && my <= iy + 138) {
-                if (my >= iy + 22 && my < iy + 38) inspectorElement.setEnabled(!inspectorElement.isEnabled());
-                else if (my >= iy + 38 && my < iy + 54) inspectorElement.style().smallCaps = !inspectorElement.style().smallCaps;
-                else if (my >= iy + 54 && my < iy + 70) inspectorElement.style().backgroundEnabled = !inspectorElement.style().backgroundEnabled;
-                else if (my >= iy + 70 && my < iy + 86) inspectorElement.style().borderEnabled = !inspectorElement.style().borderEnabled;
-                else if (my >= iy + 86 && my < iy + 102) inspectorElement.setLocked(!inspectorElement.isLocked());
+            float dw = 152.0f;
+            float dh = 148.0f;
+            float ix = Math.min(this.width - dw - 8, inspectorElement.x() + inspectorElement.width() + 8);
+            if (ix < 8) ix = 8;
+            float iy = Math.max(8, Math.min(this.height - dh - 8, inspectorElement.y()));
+            float bw = (dw - 18) * 0.5f;
+
+            if (mx >= ix && mx <= ix + dw && my >= iy && my <= iy + dh) {
+                if (hit(mx, my, ix + 6, iy + 22, bw, 16)) inspectorElement.setEnabled(!inspectorElement.isEnabled());
+                else if (hit(mx, my, ix + 12 + bw, iy + 22, bw, 16)) inspectorElement.setLocked(!inspectorElement.isLocked());
+                else if (hit(mx, my, ix + 6, iy + 42, bw, 16)) inspectorElement.style().backgroundEnabled = !inspectorElement.style().backgroundEnabled;
+                else if (hit(mx, my, ix + 12 + bw, iy + 42, bw, 16)) inspectorElement.style().borderEnabled = !inspectorElement.style().borderEnabled;
+                else if (hit(mx, my, ix + 6, iy + 62, bw, 16)) inspectorElement.style().smallCaps = !inspectorElement.style().smallCaps;
+                else if (hit(mx, my, ix + 12 + bw, iy + 62, bw, 16)) inspectorElement.style().animationEnabled = !inspectorElement.style().animationEnabled;
+                else if (hit(mx, my, ix + dw - 44, iy + 83, 16, 14)) inspectorElement.style().scale = Math.max(0.6f, inspectorElement.style().scale - 0.1f);
+                else if (hit(mx, my, ix + dw - 24, iy + 83, 16, 14)) inspectorElement.style().scale = Math.min(2.5f, inspectorElement.style().scale + 0.1f);
+                else if (hit(mx, my, ix + dw - 44, iy + 103, 16, 14)) inspectorElement.style().cornerRadius = Math.max(0.0f, inspectorElement.style().cornerRadius - 1.0f);
+                else if (hit(mx, my, ix + dw - 24, iy + 103, 16, 14)) inspectorElement.style().cornerRadius = Math.min(18.0f, inspectorElement.style().cornerRadius + 1.0f);
+                else if (hit(mx, my, ix + 6, iy + 124, dw - 12, 16)) inspectorElement.style().scale = 1.0f;
                 return true;
             }
         }
@@ -103,6 +154,10 @@ public final class HudEditorScreen extends Screen {
         }
         inspectorElement = null;
         return super.mouseClicked(click, doubled);
+    }
+
+    private static boolean hit(double mx, double my, float x, float y, float w, float h) {
+        return mx >= x && mx <= x + w && my >= y && my <= y + h;
     }
 
     @Override
@@ -149,15 +204,6 @@ public final class HudEditorScreen extends Screen {
         if (input.key() == GLFW.GLFW_KEY_ESCAPE) {
             if (this.client != null) this.client.setScreen(parent);
             return true;
-        }
-        if (inspectorElement != null) {
-            switch (input.key()) {
-                case GLFW.GLFW_KEY_1 -> inspectorElement.setEnabled(!inspectorElement.isEnabled());
-                case GLFW.GLFW_KEY_2 -> inspectorElement.style().smallCaps = !inspectorElement.style().smallCaps;
-                case GLFW.GLFW_KEY_3 -> inspectorElement.style().backgroundEnabled = !inspectorElement.style().backgroundEnabled;
-                case GLFW.GLFW_KEY_4 -> inspectorElement.style().borderEnabled = !inspectorElement.style().borderEnabled;
-                case GLFW.GLFW_KEY_5 -> inspectorElement.setLocked(!inspectorElement.isLocked());
-            }
         }
         return super.keyPressed(input);
     }

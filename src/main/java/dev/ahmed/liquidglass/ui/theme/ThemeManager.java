@@ -7,7 +7,7 @@ public final class ThemeManager {
     private static final ThemeManager INSTANCE = new ThemeManager();
     private final Map<String, ThemeTokens> registry = new LinkedHashMap<>();
     private ThemeTokens activeTheme;
-    private GlassQuality glassQuality = GlassQuality.HIGH;
+    private GlassQuality glassQuality = GlassQuality.ULTRA;
 
     private ThemeManager() {
         register(ThemeTokens.darkLiquidGlass());

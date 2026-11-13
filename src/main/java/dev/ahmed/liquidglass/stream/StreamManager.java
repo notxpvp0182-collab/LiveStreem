@@ -64,13 +64,14 @@ public final class StreamManager {
     private static final Pattern BARE_ID = Pattern.compile("^[A-Za-z0-9_-]{11}$");
 
     private static final int MAX_RETRIES = 8;
-    private static final long MIN_CHAT_POLL_MS = 3_000L;
-    private static final int SEEN_IDS_LIMIT = 600;
+    private static final long MIN_CHAT_POLL_MS = 2_500L;
+    private static final int SEEN_IDS_LIMIT = 800;
 
     private static final StreamManager INSTANCE = new StreamManager();
 
     private final AtomicReference<StreamSnapshot> snapshotRef = new AtomicReference<>(StreamSnapshot.disconnected());
     private final Deque<ChatMessage> chatBuffer = new ConcurrentLinkedDeque<>();
+    private final Deque<ChatMessage> pendingDelayQueue = new ConcurrentLinkedDeque<>();
     private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread t = new Thread(r, "LiquidGlass-StreamWorker");
         t.setDaemon(true);
@@ -78,8 +79,10 @@ public final class StreamManager {
     });
 
     private volatile String lastUrl = "";
-    private volatile int refreshIntervalSec = 30;
+    private volatile int refreshIntervalSec = 25;
     private volatile int maxChatHistory = 500;
+    private volatile int chatDelayMs = 0; // 0 = Instant YouTube real-time speed
+    private volatile long lastPacedReleaseMs = 0L;
     private volatile int totalChatReceived = 0;
     private volatile long lastSuccessEpochMs = 0L;
     private volatile Session session;
@@ -104,6 +107,7 @@ public final class StreamManager {
         this.lastUrl = rawUrl == null ? "" : rawUrl.trim();
         stopSession();
         chatBuffer.clear();
+        pendingDelayQueue.clear();
 
         Optional<String> id = extractVideoId(lastUrl);
         if (id.isEmpty()) {
@@ -120,6 +124,7 @@ public final class StreamManager {
     public synchronized void disconnect() {
         stopSession();
         chatBuffer.clear();
+        pendingDelayQueue.clear();
         snapshotRef.set(StreamSnapshot.disconnected());
     }
 
@@ -137,7 +142,44 @@ public final class StreamManager {
         return new StreamSnapshot(ConnectionState.ERROR, id, "--", "--", null, "--", null, null, 0L, message);
     }
 
-    private void pushChat(ChatMessage msg) {
+    private void enqueueIncomingChat(ChatMessage msg) {
+        if (chatDelayMs <= 0) {
+            commitToChatBuffer(new ChatMessage(
+                msg.id(), msg.author(), msg.content(), msg.timestampMs(),
+                System.nanoTime(), msg.owner(), msg.moderator(), msg.member()
+            ));
+        } else {
+            while (pendingDelayQueue.size() >= 300) pendingDelayQueue.pollFirst();
+            pendingDelayQueue.offerLast(msg);
+        }
+    }
+
+    public void tickChatPacing() {
+        if (pendingDelayQueue.isEmpty()) return;
+        if (chatDelayMs <= 0) {
+            ChatMessage m;
+            while ((m = pendingDelayQueue.pollFirst()) != null) {
+                commitToChatBuffer(new ChatMessage(
+                    m.id(), m.author(), m.content(), m.timestampMs(),
+                    System.nanoTime(), m.owner(), m.moderator(), m.member()
+                ));
+            }
+            return;
+        }
+        long nowMs = System.currentTimeMillis();
+        if (nowMs - lastPacedReleaseMs >= chatDelayMs) {
+            ChatMessage m = pendingDelayQueue.pollFirst();
+            if (m != null) {
+                lastPacedReleaseMs = nowMs;
+                commitToChatBuffer(new ChatMessage(
+                    m.id(), m.author(), m.content(), m.timestampMs(),
+                    System.nanoTime(), m.owner(), m.moderator(), m.member()
+                ));
+            }
+        }
+    }
+
+    private void commitToChatBuffer(ChatMessage msg) {
         int cap = Math.max(10, maxChatHistory);
         while (chatBuffer.size() >= cap) chatBuffer.pollFirst();
         chatBuffer.offerLast(msg);
@@ -150,9 +192,11 @@ public final class StreamManager {
     public int maxChatHistory() { return maxChatHistory; }
     public int totalChatReceived() { return totalChatReceived; }
     public long lastSuccessEpochMs() { return lastSuccessEpochMs; }
-    public void setMaxChatHistory(int value) { this.maxChatHistory = Math.max(10, Math.min(500, value)); }
+    public void setMaxChatHistory(int value) { this.maxChatHistory = Math.max(10, Math.min(1000, value)); }
     public int refreshIntervalSec() { return refreshIntervalSec; }
     public void setRefreshIntervalSec(int value) { this.refreshIntervalSec = Math.max(15, Math.min(300, value)); }
+    public int chatDelayMs() { return chatDelayMs; }
+    public void setChatDelayMs(int delayMs) { this.chatDelayMs = Math.max(0, Math.min(3000, delayMs)); }
 
     private final class Session {
         private final String videoId;
@@ -247,7 +291,7 @@ public final class StreamManager {
                     if (!seenIds.add(msg.id())) continue;
                     seenOrder.addLast(msg.id());
                     if (seenOrder.size() > SEEN_IDS_LIMIT) seenIds.remove(seenOrder.pollFirst());
-                    pushChat(msg);
+                    enqueueIncomingChat(msg);
                 }
                 if (!chatNote.isEmpty()) {
                     chatNote = "";

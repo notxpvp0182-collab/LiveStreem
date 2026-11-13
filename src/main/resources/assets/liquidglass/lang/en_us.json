@@ -1,6 +1,7 @@
 {
   "key.liquidglass.open_gui": "Open LiveStream GUI",
-  "key.liquidglass.chat_up": "Scroll Live Chat Up (Page Up)",
-  "key.liquidglass.chat_down": "Scroll Live Chat Down (Page Down)",
-  "key.category.liquidglass.general": "LiveStream"
+  "key.liquidglass.chat_up": "Live Chat Scroll Up (Up Arrow)",
+  "key.liquidglass.chat_down": "Live Chat Scroll Down (Down Arrow)",
+  "key.category.liquidglass.general": "LiveStream",
+  "key.categories.liquidglass.general": "LiveStream"
 }
