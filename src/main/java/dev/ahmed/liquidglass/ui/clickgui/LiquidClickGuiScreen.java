@@ -138,13 +138,15 @@ public final class LiquidClickGuiScreen extends Screen {
         float cardY = centerY - cardH * 0.5f;
 
         int selIndex = selectedCategory != null ? selectedCategory.ordinal() : cats.length / 2;
-        float splitOffset = 105.0f * expand;
-
         for (int i = 0; i < cats.length; i++) {
-            float cx = startX + i * (cardW + gap);
-            if (expand > 0.001f) {
-                if (i < selIndex) cx -= splitOffset;
-                else if (i > selIndex) cx += splitOffset;
+            float baseCx = startX + i * (cardW + gap);
+            float cx = baseCx;
+            if (expand > 0.001f && selectedCategory != null && i != selIndex) {
+                int remIdx = (i < selIndex) ? i : (i - 1);
+                int slot = (remIdx < 2) ? remIdx : (remIdx + 1);
+                float targetCx = startX + slot * (cardW + gap) + (remIdx < 2 ? -105.0f : 105.0f);
+                cx = baseCx + (targetCx - baseCx) * expand;
+            }
             }
             boolean hovered = mouseX >= cx && mouseX <= cx + cardW && mouseY >= cardY && mouseY <= cardY + cardH;
             cardHoverAnims[i].animateTo(hovered ? 1.0f : 0.0f);
@@ -278,6 +280,27 @@ public final class LiquidClickGuiScreen extends Screen {
             }
 
             if (mx < px || mx > px + panelW || my < py || my > py + panelH) {
+                Category[] cats = Category.values();
+                float cardW = 68.0f, cardH = 74.0f, gap = 10.0f;
+                float startX = centerX - (cats.length * cardW + (cats.length - 1) * gap) * 0.5f;
+                float cardY = centerY - cardH * 0.5f;
+                int selIdx = selectedCategory.ordinal();
+                for (int i = 0; i < cats.length; i++) {
+                    if (i == selIdx) continue;
+                    int remIdx = (i < selIdx) ? i : (i - 1);
+                    int slot = (remIdx < 2) ? remIdx : (remIdx + 1);
+                    float cx = startX + slot * (cardW + gap) + (remIdx < 2 ? -105.0f : 105.0f);
+                    if (button == 0 && mx >= cx && mx <= cx + cardW && my >= cardY && my <= cardY + cardH) {
+                        if (cats[i] == Category.STREAM) {
+                            if (this.client != null) this.client.setScreen(new WorkspaceModalScreen(this));
+                            return true;
+                        }
+                        selectedCategory = cats[i];
+                        scrollOffset = 0.0f;
+                        rebuildCategoryToggles(selectedCategory);
+                        return true;
+                    }
+                }
                 selectedCategory = null;
                 return true;
             }

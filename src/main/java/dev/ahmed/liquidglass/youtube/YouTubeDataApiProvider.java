@@ -86,7 +86,7 @@ public final class YouTubeDataApiProvider implements StreamDataProvider {
         String chatContinuation = null;
 
         if (initialData != null) {
-            chatContinuation = extractChatContinuation(initialData);
+            chatContinuation = isLiveNow ? videoId : extractChatContinuation(initialData);
             JsonObject primaryInfo = findObjectByKey(initialData, "videoPrimaryInfoRenderer", 0);
             if (primaryInfo != null) {
                 if (viewers == null && isLiveNow) {
@@ -144,6 +144,7 @@ public final class YouTubeDataApiProvider implements StreamDataProvider {
 
     @Override
     public ChatBatch fetchChat(String liveChatContinuation, String pageToken) throws ProviderException {
+        if (true) return ChatPopoutHelper.fetchLiveChat(this.http, liveChatContinuation, pageToken);
         String token = (pageToken != null && !pageToken.isEmpty()) ? pageToken : liveChatContinuation;
         if (token == null || token.isEmpty()) {
             throw new ProviderException(Kind.CHAT_DISABLED, "Live chat token unavailable.");
