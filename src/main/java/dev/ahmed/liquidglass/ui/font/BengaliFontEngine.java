@@ -1,5 +1,7 @@
 package dev.ahmed.liquidglass.ui.font;
 
+import dev.ahmed.liquidglass.ui.theme.GlassQuality;
+import dev.ahmed.liquidglass.ui.theme.ThemeManager;
 import net.minecraft.client.gui.DrawContext;
 import org.joml.Matrix3x2fStack;
 
@@ -7,15 +9,19 @@ import java.io.DataInputStream;
 import java.io.InputStream;
 import java.text.Normalizer;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public final class BengaliFontEngine {
     private static final float HD_SCALE = 0.285f;
-    public record AksharGlyph(int advanceSubPx, int[] spans) {}
+    public record AksharGlyph(int advanceSubPx, int[] rects) {}
 
     private static final Map<String, AksharGlyph> ATLAS = new HashMap<>(2048);
+    private static final Map<String, List<AksharGlyph>> TOKEN_CACHE = new ConcurrentHashMap<>(512);
+    private static final Map<String, Integer> WIDTH_CACHE = new ConcurrentHashMap<>(512);
     private static boolean loaded = false;
 
     private BengaliFontEngine() {}
@@ -30,12 +36,12 @@ public final class BengaliFontEngine {
             for (int i = 0; i < count; i++) {
                 String key = dis.readUTF();
                 int adv = dis.readUnsignedByte();
-                int spanCount = dis.readUnsignedShort();
-                int[] spans = new int[spanCount];
-                for (int s = 0; s < spanCount; s++) {
-                    spans[s] = dis.readInt();
+                int rectCount = dis.readUnsignedShort();
+                int[] rects = new int[rectCount];
+                for (int s = 0; s < rectCount; s++) {
+                    rects[s] = dis.readInt();
                 }
-                ATLAS.put(key, new AksharGlyph(adv, spans));
+                ATLAS.put(key, new AksharGlyph(adv, rects));
             }
         } catch (Exception ignored) {}
     }
@@ -57,41 +63,49 @@ public final class BengaliFontEngine {
     }
 
     public static List<AksharGlyph> tokenizeToGlyphs(String bnWord) {
+        if (bnWord == null || bnWord.isEmpty()) return List.of();
         ensureLoaded();
-        String norm = normalizeBengali(bnWord);
-        List<AksharGlyph> out = new ArrayList<>(norm.length());
-        int n = norm.length();
-        int i = 0;
-        while (i < n) {
-            AksharGlyph matched = null;
-            int matchedLen = 0;
-            int maxLen = Math.min(8, n - i);
-            for (int len = maxLen; len >= 1; len--) {
-                String sub = norm.substring(i, i + len);
-                AksharGlyph g = ATLAS.get(sub);
-                if (g != null) {
-                    matched = g;
-                    matchedLen = len;
-                    break;
+        if (TOKEN_CACHE.size() > 1024) TOKEN_CACHE.clear();
+        return TOKEN_CACHE.computeIfAbsent(bnWord, key -> {
+            String norm = normalizeBengali(key);
+            List<AksharGlyph> out = new ArrayList<>(norm.length());
+            int n = norm.length();
+            int i = 0;
+            while (i < n) {
+                AksharGlyph matched = null;
+                int matchedLen = 0;
+                int maxLen = Math.min(8, n - i);
+                for (int len = maxLen; len >= 1; len--) {
+                    String sub = norm.substring(i, i + len);
+                    AksharGlyph g = ATLAS.get(sub);
+                    if (g != null) {
+                        matched = g;
+                        matchedLen = len;
+                        break;
+                    }
+                }
+                if (matched != null) {
+                    out.add(matched);
+                    i += matchedLen;
+                } else {
+                    i++;
                 }
             }
-            if (matched != null) {
-                out.add(matched);
-                i += matchedLen;
-            } else {
-                i++;
-            }
-        }
-        return out;
+            return Collections.unmodifiableList(out);
+        });
     }
 
     public static int measureBengaliWidth(String bnSegment) {
-        List<AksharGlyph> glyphs = tokenizeToGlyphs(bnSegment);
-        int subPx = 0;
-        for (AksharGlyph g : glyphs) {
-            subPx += g.advanceSubPx();
-        }
-        return Math.round(subPx * HD_SCALE);
+        if (bnSegment == null || bnSegment.isEmpty()) return 0;
+        if (WIDTH_CACHE.size() > 1024) WIDTH_CACHE.clear();
+        return WIDTH_CACHE.computeIfAbsent(bnSegment, seg -> {
+            List<AksharGlyph> glyphs = tokenizeToGlyphs(seg);
+            int subPx = 0;
+            for (AksharGlyph g : glyphs) {
+                subPx += g.advanceSubPx();
+            }
+            return Math.round(subPx * HD_SCALE);
+        });
     }
 
     public static float drawBengaliSegment(DrawContext ctx, String bnSegment, float x, float y, int color, boolean shadow) {
@@ -100,7 +114,7 @@ public final class BengaliFontEngine {
 
         int baseAlpha = (color >>> 24) & 0xFF;
         int rgb = color & 0x00FFFFFF;
-        int shadowRgb = 0x080A0F;
+        boolean highQualityShadow = shadow && ThemeManager.get().quality() != GlassQuality.LOW;
 
         Matrix3x2fStack m = ctx.getMatrices();
         m.pushMatrix();
@@ -108,28 +122,33 @@ public final class BengaliFontEngine {
         m.scale(HD_SCALE, HD_SCALE);
 
         int cursorSubX = 0;
-        for (AksharGlyph g : glyphs) {
-            int[] spans = g.spans();
-            if (shadow) {
-                for (int sp : spans) {
-                    int sy = (sp >>> 24) & 0xFF;
-                    int x1 = ((sp >>> 16) & 0xFF) - 4;
-                    int x2 = ((sp >>> 8) & 0xFF) - 4;
-                    int sa = (sp & 0xFF);
-                    int effA = (sa * baseAlpha) / 340;
-                    if (effA > 10) {
-                        ctx.fill(cursorSubX + x1 + 2, sy + 2, cursorSubX + x2 + 2, sy + 3, (effA << 24) | shadowRgb);
-                    }
+        if (highQualityShadow) {
+            int shadowCol = (Math.max(12, (int) (baseAlpha * 0.55f)) << 24) | 0x06080C;
+            for (AksharGlyph g : glyphs) {
+                for (int sp : g.rects()) {
+                    int a6 = sp & 0x3F;
+                    if (a6 < 32) continue;
+                    int y1 = (sp >>> 26) & 0x3F;
+                    int y2 = (sp >>> 20) & 0x3F;
+                    int x1 = ((sp >>> 13) & 0x7F) - 4;
+                    int x2 = ((sp >>> 6) & 0x7F) - 4;
+                    ctx.fill(cursorSubX + x1 + 2, y1 + 2, cursorSubX + x2 + 2, y2 + 2, shadowCol);
                 }
+                cursorSubX += g.advanceSubPx();
             }
-            for (int sp : spans) {
-                int sy = (sp >>> 24) & 0xFF;
-                int x1 = ((sp >>> 16) & 0xFF) - 4;
-                int x2 = ((sp >>> 8) & 0xFF) - 4;
-                int sa = (sp & 0xFF);
-                int effA = (sa * baseAlpha) / 255;
-                if (effA > 8) {
-                    ctx.fill(cursorSubX + x1, sy, cursorSubX + x2, sy + 1, (effA << 24) | rgb);
+            cursorSubX = 0;
+        }
+
+        for (AksharGlyph g : glyphs) {
+            for (int sp : g.rects()) {
+                int y1 = (sp >>> 26) & 0x3F;
+                int y2 = (sp >>> 20) & 0x3F;
+                int x1 = ((sp >>> 13) & 0x7F) - 4;
+                int x2 = ((sp >>> 6) & 0x7F) - 4;
+                int a8 = Math.min(255, (sp & 0x3F) << 2);
+                int effA = (a8 * baseAlpha) / 255;
+                if (effA > 10) {
+                    ctx.fill(cursorSubX + x1, y1, cursorSubX + x2, y2, (effA << 24) | rgb);
                 }
             }
             cursorSubX += g.advanceSubPx();

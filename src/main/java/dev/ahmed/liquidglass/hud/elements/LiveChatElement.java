@@ -21,6 +21,8 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public final class LiveChatElement extends HudElement {
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm")
@@ -34,14 +36,14 @@ public final class LiveChatElement extends HudElement {
 
     public boolean showYouTubeIcon = true;
     public boolean showUsername = true;
-    public boolean showTimestamp = false; // Default OFF as requested
+    public boolean showTimestamp = false;
     public boolean enableEmojiFallback = true;
     public boolean coloredUsernames = true;
     public boolean coloredMessages = false;
     public boolean rgbMode = false;
     public boolean newestAtTop = false;
-    public boolean chatShadow = false; // Nametag-style dark backdrop behind lines
-    public boolean textShadow = true; // Crisp drop shadow on text
+    public boolean chatShadow = false;
+    public boolean textShadow = true;
 
     public int usernameColor = 0xFFD8DEE9;
     public int messageColor = 0xFFFFFFFF;
@@ -58,12 +60,23 @@ public final class LiveChatElement extends HudElement {
         String authorPart,
         String contentPart,
         boolean isFirstLine,
-        int msgIndex
+        int msgIndex,
+        int prefixWidth,
+        int contentWidth
     ) {}
+
+    private final Map<String, List<String>> wrapCache = new ConcurrentHashMap<>(512);
+    private List<DisplayLine> cachedLines = List.of();
+    private int cachedTotalReceived = -1;
+    private int cachedAvailWidth = -1;
+    private boolean cachedShowTs = false;
+    private boolean cachedShowUser = true;
+    private boolean cachedShowYt = true;
+    private boolean cachedSmallCaps = false;
 
     public LiveChatElement() {
         super("live_chat", "Live Chat", 12, 145, 290, 155, true);
-        style().backgroundEnabled = false; // Clean nametag-style floating chat by default
+        style().backgroundEnabled = false;
     }
 
     public static void scrollUp(int lines) {
@@ -90,9 +103,6 @@ public final class LiveChatElement extends HudElement {
         );
 
         if (queue.isEmpty()) {
-            if (chatShadow) {
-                ctx.fill(Math.round(x() + 4), Math.round(y() + 6), Math.round(x() + 185), Math.round(y() + 18), 0x55000000);
-            }
             UIRenderer.drawText(ctx, "Live chat waiting for messages...", x() + 8, y() + 8,
                 t.textMuted(), style().scale, style().smallCaps, textShadow);
             ctx.disableScissor();
@@ -101,36 +111,64 @@ public final class LiveChatElement extends HudElement {
 
         TextRenderer tr = MinecraftClient.getInstance().textRenderer;
         int availWidth = Math.max(80, Math.round((width() - 14.0f) / Math.max(0.5f, style().scale)));
+        int currentTotal = StreamManager.get().totalChatReceived();
 
-        List<StreamManager.ChatMessage> snapshot = new ArrayList<>(queue);
-        List<DisplayLine> allWrappedLines = new ArrayList<>(snapshot.size() * 2);
+        // Only rebuild display lines when a new message arrives or layout settings change
+        if (currentTotal != cachedTotalReceived
+            || availWidth != cachedAvailWidth
+            || showTimestamp != cachedShowTs
+            || showUsername != cachedShowUser
+            || showYouTubeIcon != cachedShowYt
+            || style().smallCaps != cachedSmallCaps) {
 
-        for (int mIdx = 0; mIdx < snapshot.size(); mIdx++) {
-            StreamManager.ChatMessage msg = snapshot.get(mIdx);
-            String ts = showTimestamp ? (TIME_FMT.format(Instant.ofEpochMilli(msg.timestampMs())) + " ") : "";
-            String rawAuthor = msg.author().startsWith("@") ? msg.author() : ("@" + msg.author());
-            if (rawAuthor.length() > 15) {
-                rawAuthor = rawAuthor.substring(0, 12) + "...";
+            if (availWidth != cachedAvailWidth || style().smallCaps != cachedSmallCaps) {
+                wrapCache.clear();
             }
-            String author = showUsername ? (rawAuthor + "  ") : "";
-            String body = ChatPopoutHelper.replaceShortcodes(msg.content());
+            cachedTotalReceived = currentTotal;
+            cachedAvailWidth = availWidth;
+            cachedShowTs = showTimestamp;
+            cachedShowUser = showUsername;
+            cachedShowYt = showYouTubeIcon;
+            cachedSmallCaps = style().smallCaps;
 
-            int badgeW = (showYouTubeIcon ? 14 : 0) + ((msg.owner() || msg.moderator() || msg.member()) ? 11 : 0);
-            int prefixW = badgeW + tr.getWidth(ts + author);
-            int firstLineAvail = Math.max(40, availWidth - prefixW);
-            int contLineAvail = Math.max(40, availWidth - prefixW);
+            List<StreamManager.ChatMessage> snapshot = new ArrayList<>(queue);
+            List<DisplayLine> built = new ArrayList<>(snapshot.size() * 2);
 
-            List<String> wrapped = wrapTextToWidth(tr, body, firstLineAvail, contLineAvail);
-            for (int l = 0; l < wrapped.size(); l++) {
-                if (l == 0) {
-                    allWrappedLines.add(new DisplayLine(msg, ts, author, wrapped.get(0), true, mIdx));
-                } else {
-                    allWrappedLines.add(new DisplayLine(msg, "", "", wrapped.get(l), false, mIdx));
+            for (int mIdx = 0; mIdx < snapshot.size(); mIdx++) {
+                StreamManager.ChatMessage msg = snapshot.get(mIdx);
+                String ts = showTimestamp ? (TIME_FMT.format(Instant.ofEpochMilli(msg.timestampMs())) + " ") : "";
+                String author = showUsername ? formatAuthorColumn(msg.author()) : "";
+
+                int badgeW = (showYouTubeIcon ? 14 : 0) + ((msg.owner() || msg.moderator() || msg.member()) ? 10 : 0);
+                int prefixW = badgeW + tr.getWidth(ts + author);
+                int lineAvail = Math.max(40, availWidth - prefixW);
+
+                List<String> wrapped = wrapCache.computeIfAbsent(msg.id(), id -> {
+                    String body = ChatPopoutHelper.replaceShortcodes(msg.content());
+                    return wrapTextToWidth(tr, body, lineAvail, lineAvail);
+                });
+                if (wrapCache.size() > 600) wrapCache.clear();
+
+                for (int l = 0; l < wrapped.size(); l++) {
+                    String part = wrapped.get(l);
+                    int cw = EmojiRenderer.measureRichTextWidth(tr, part, style().smallCaps);
+                    if (l == 0) {
+                        built.add(new DisplayLine(msg, ts, author, part, true, mIdx, prefixW, cw));
+                    } else {
+                        built.add(new DisplayLine(msg, "", "", part, false, mIdx, prefixW, cw));
+                    }
                 }
             }
+            cachedLines = built;
         }
 
+        List<DisplayLine> allWrappedLines = cachedLines;
         int totalLines = allWrappedLines.size();
+        if (totalLines == 0) {
+            ctx.disableScissor();
+            return;
+        }
+
         int maxLinesInBox = Math.max(1, (int) ((height() - 12.0f) / (lineSpacing * style().scale)));
         int maxScroll = Math.max(0, totalLines - maxLinesInBox);
         if (scrollLineOffset > maxScroll) {
@@ -141,7 +179,6 @@ public final class LiveChatElement extends HudElement {
         float stepY = lineSpacing * style().scale;
 
         if (!newestAtTop) {
-            // Standard mode: Latest messages at the bottom, scrolling upward
             int bottomLineIdx = totalLines - 1 - scrollLineOffset;
             float drawY = y() + height() - 13.0f - (scrollLineOffset > 0 ? 12.0f : 0.0f);
             for (int i = bottomLineIdx; i >= 0; i--) {
@@ -150,13 +187,13 @@ public final class LiveChatElement extends HudElement {
                 drawY -= stepY;
             }
         } else {
-            // Top-down mode: Latest messages at the top, pushing older lines downward
             float drawY = y() + 4.0f + (scrollLineOffset > 0 ? 12.0f : 0.0f);
-            int startMsgIdx = snapshot.size() - 1;
+            int maxMsgIdx = allWrappedLines.get(totalLines - 1).msgIndex();
             int skippedLines = 0;
-            for (int m = startMsgIdx; m >= 0; m--) {
+            for (int m = maxMsgIdx; m >= 0; m--) {
                 if (drawY > y() + height() - 12.0f) break;
-                for (DisplayLine dl : allWrappedLines) {
+                for (int i = 0; i < totalLines; i++) {
+                    DisplayLine dl = allWrappedLines.get(i);
                     if (dl.msgIndex() == m) {
                         if (skippedLines < scrollLineOffset) {
                             skippedLines++;
@@ -183,28 +220,26 @@ public final class LiveChatElement extends HudElement {
     private void drawSingleDisplayLine(DrawContext ctx, TextRenderer tr, DisplayLine line, float drawY, long nowNs) {
         StreamManager.ChatMessage msg = line.msg();
         float ageSec = (nowNs - msg.receivedNanoTime()) / 1_000_000_000.0f;
-        float anim = (style().animationEnabled && scrollLineOffset == 0)
+        float anim = (style().animationEnabled && scrollLineOffset == 0 && ageSec < entranceDurationSec)
             ? Animation.Easing.EASE_OUT_CUBIC.apply(Math.min(1.0f, ageSec / Math.max(0.05f, entranceDurationSec)))
             : 1.0f;
 
-        float slideX = (1.0f - anim) * -12.0f;
-        float slideY = (1.0f - anim) * (newestAtTop ? -5.0f : 5.0f);
-        int alpha = Math.max(20, Math.min(255, (int) (255 * anim)));
+        float slideX = (1.0f - anim) * -10.0f;
+        float slideY = (1.0f - anim) * (newestAtTop ? -4.0f : 4.0f);
+        int alpha = Math.max(25, Math.min(255, (int) (255 * anim)));
 
         Matrix3x2fStack matrices = ctx.getMatrices();
         matrices.pushMatrix();
         matrices.translate(x() + 6 + slideX, drawY + slideY);
-        matrices.scale(style().scale, style().scale);
+        if (Math.abs(style().scale - 1.0f) > 0.001f) {
+            matrices.scale(style().scale, style().scale);
+        }
 
-        int badgeIndent = (showYouTubeIcon ? 14 : 0) + ((msg.owner() || msg.moderator() || msg.member()) ? 11 : 0);
-        int prefixW = badgeIndent + tr.getWidth(line.timestampPart() + (showUsername ? formatAuthorColumn(msg.author()) : ""));
-        int contentW = EmojiRenderer.measureRichTextWidth(tr, line.contentPart(), style().smallCaps);
-
-        // Minecraft Player Nametag-style dark translucent shadow backdrop
+        int prefixW = line.prefixWidth();
         if (chatShadow) {
-            int bgAlpha = Math.round(105 * (alpha / 255.0f));
+            int bgAlpha = Math.round(100 * (alpha / 255.0f));
             int lineStartX = line.isFirstLine() ? -2 : (prefixW - 2);
-            int lineEndX = prefixW + contentW + 4;
+            int lineEndX = prefixW + line.contentWidth() + 4;
             ctx.fill(lineStartX, -1, lineEndX, 10, (bgAlpha << 24));
         }
 
@@ -223,15 +258,13 @@ public final class LiveChatElement extends HudElement {
             }
             if (!line.authorPart().isEmpty()) {
                 int aCol = resolveAuthorColor(msg, line.msgIndex());
-                String shapedAuthor = WorldLanguageShaper.shape(line.authorPart());
-                ctx.drawText(tr, shapedAuthor, Math.round(cursorX), 0,
+                ctx.drawText(tr, line.authorPart(), Math.round(cursorX), 0,
                     UIRenderer.withAlpha(aCol, alpha), textShadow);
             }
         }
 
-        cursorX = prefixW;
         int mCol = UIRenderer.withAlpha(resolveMessageColor(msg, line.msgIndex()), alpha);
-        EmojiRenderer.drawRichText(ctx, tr, line.contentPart(), cursorX, 0, mCol, style().smallCaps, textShadow);
+        EmojiRenderer.drawRichText(ctx, tr, line.contentPart(), prefixW, 0, mCol, style().smallCaps, textShadow);
 
         matrices.popMatrix();
     }

@@ -70,7 +70,7 @@ tasks.named("processResources") {
         g.dispose()
         ImageIO.write(img, "PNG", iconFile)
 
-        // 2. Pre-bake Full HD HarfBuzz-shaped Bengali Akshar Atlas from HindSiliguri-SemiBold.ttf
+        // 2. Pre-bake Full HD 2D-Merged Bengali Akshar Atlas from HindSiliguri-SemiBold.ttf
         File ttfFile = file("src/main/resources/assets/liquidglass/font/bengali.ttf")
         File atlasFile = file("src/main/resources/assets/liquidglass/font/bengali_atlas.dat")
         if (ttfFile.exists()) {
@@ -140,35 +140,57 @@ tasks.named("processResources") {
                     cg.drawString(ak, 4, 29)
 
                     int adv = Math.max(4, fm.stringWidth(ak))
-                    java.util.List<Integer> spans = new java.util.ArrayList<>()
+                    java.util.List<int[]> rawSpans = new java.util.ArrayList<>()
                     for (int y = 0; y < 40; y++) {
                         int x = 0
                         while (x < 108) {
                             int a = (canvas.getRGB(x, y) >>> 24) & 0xFF
-                            if (a >= 45) {
+                            if (a >= 65) {
                                 int xStart = x
                                 int sumA = a
                                 int cnt = 1
                                 x++
                                 while (x < 108) {
                                     int na = (canvas.getRGB(x, y) >>> 24) & 0xFF
-                                    if (na < 45 || Math.abs(na - (sumA / cnt)) > 65) break
+                                    if (na < 65) break
                                     sumA += na
                                     cnt++
                                     x++
                                 }
-                                int avgA = Math.min(255, (int) ((sumA / cnt) * 1.12f))
-                                int packed = ((y & 0xFF) << 24) | ((xStart & 0xFF) << 16) | ((x & 0xFF) << 8) | (avgA & 0xFF)
-                                spans.add(packed)
+                                int avgA = Math.min(255, (int) ((sumA / cnt) * 1.15f))
+                                rawSpans.add([y, y + 1, xStart, x, avgA] as int[])
                             } else {
                                 x++
                             }
                         }
                     }
+
+                    // Vertically merge adjacent rows that have identical xStart and xEnd
+                    java.util.List<Integer> mergedRects = new java.util.ArrayList<>()
+                    boolean[] used = new boolean[rawSpans.size()]
+                    for (int i = 0; i < rawSpans.size(); i++) {
+                        if (used[i]) continue
+                        int[] cur = rawSpans.get(i)
+                        int y1 = cur[0], y2 = cur[1], x1 = cur[2], x2 = cur[3], aSum = cur[4], aCnt = 1
+                        for (int j = i + 1; j < rawSpans.size(); j++) {
+                            if (used[j]) continue
+                            int[] nxt = rawSpans.get(j)
+                            if (nxt[0] == y2 && nxt[2] == x1 && nxt[3] == x2) {
+                                y2 = nxt[1]
+                                aSum += nxt[4]
+                                aCnt++
+                                used[j] = true
+                            }
+                        }
+                        int finalA = Math.min(63, (aSum / aCnt) >>> 2)
+                        int packed = ((y1 & 0x3F) << 26) | ((y2 & 0x3F) << 20) | ((x1 & 0x7F) << 13) | ((x2 & 0x7F) << 6) | finalA
+                        mergedRects.add(packed)
+                    }
+
                     out.writeUTF(ak)
                     out.writeByte(adv)
-                    out.writeShort(spans.size())
-                    for (int sp : spans) {
+                    out.writeShort(mergedRects.size())
+                    for (int sp : mergedRects) {
                         out.writeInt(sp)
                     }
                 }
