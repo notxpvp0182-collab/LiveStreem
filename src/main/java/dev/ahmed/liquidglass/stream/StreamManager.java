@@ -79,7 +79,7 @@ public final class StreamManager {
 
     private volatile String lastUrl = "";
     private volatile int refreshIntervalSec = 30;
-    private volatile int maxChatHistory = 100;
+    private volatile int maxChatHistory = 500;
     private volatile int totalChatReceived = 0;
     private volatile long lastSuccessEpochMs = 0L;
     private volatile Session session;

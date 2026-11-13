@@ -80,6 +80,9 @@ public final class LiquidClickGuiScreen extends Screen {
                         activeToggles.add(new GlassToggle("Show Timestamp", () -> chat.showTimestamp, v -> chat.showTimestamp = v));
                         activeToggles.add(new GlassToggle("Emoji Fallback", () -> chat.enableEmojiFallback, v -> chat.enableEmojiFallback = v));
                         activeToggles.add(new GlassToggle("Small Caps Text", () -> chat.style().smallCaps, v -> chat.style().smallCaps = v));
+                        activeToggles.add(new GlassToggle("Colored Usernames", () -> chat.coloredUsernames, v -> chat.coloredUsernames = v));
+                        activeToggles.add(new GlassToggle("Multi-Color Chat", () -> chat.coloredMessages, v -> chat.coloredMessages = v));
+                        activeToggles.add(new GlassToggle("RGB Chroma Mode", () -> chat.rgbMode, v -> chat.rgbMode = v));
                     }
                 }
             }

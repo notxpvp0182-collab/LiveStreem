@@ -2,6 +2,7 @@ package dev.ahmed.liquidglass;
 
 import dev.ahmed.liquidglass.config.ConfigManager;
 import dev.ahmed.liquidglass.hud.HudManager;
+import dev.ahmed.liquidglass.hud.elements.LiveChatElement;
 import dev.ahmed.liquidglass.stream.StreamManager;
 import dev.ahmed.liquidglass.ui.clickgui.LiquidClickGuiScreen;
 import net.fabricmc.api.ClientModInitializer;
@@ -18,6 +19,10 @@ import org.lwjgl.glfw.GLFW;
 public final class LiquidGlassClient implements ClientModInitializer {
     public static final String MOD_ID = "liquidglass";
     private static KeyBinding openGuiKey;
+    private static KeyBinding chatUpKey;
+    private static KeyBinding chatDownKey;
+    private static int upHoldTicks = 0;
+    private static int downHoldTicks = 0;
 
     @Override
     public void onInitializeClient() {
@@ -28,13 +33,25 @@ public final class LiquidGlassClient implements ClientModInitializer {
             GLFW.GLFW_KEY_RIGHT_SHIFT,
             category
         ));
+        chatUpKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+            "key.liquidglass.chat_up",
+            InputUtil.Type.KEYSYM,
+            GLFW.GLFW_KEY_PAGE_UP,
+            category
+        ));
+        chatDownKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+            "key.liquidglass.chat_down",
+            InputUtil.Type.KEYSYM,
+            GLFW.GLFW_KEY_PAGE_DOWN,
+            category
+        ));
 
         HudManager.get().initDefaults();
         ConfigManager.get().load();
 
         ConfigManager cfg = ConfigManager.get();
         if (cfg.autoConnect() && !cfg.youtubeUrl().isEmpty()) {
-            StreamManager.get().connect(cfg.youtubeUrl(), cfg.youtubeApiKey());
+            StreamManager.get().connect(cfg.youtubeUrl());
         }
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
@@ -42,6 +59,30 @@ public final class LiquidGlassClient implements ClientModInitializer {
                 if (client.currentScreen == null) {
                     client.setScreen(new LiquidClickGuiScreen());
                 }
+            }
+
+            // Page Up: 1 click = scroll up, 2s hold (40 ticks) = continuous smooth scroll up
+            if (chatUpKey.isPressed()) {
+                upHoldTicks++;
+                if (upHoldTicks == 1) {
+                    LiveChatElement.scrollUp(2);
+                } else if (upHoldTicks >= 40 && upHoldTicks % 2 == 0) {
+                    LiveChatElement.scrollUp(1);
+                }
+            } else {
+                upHoldTicks = 0;
+            }
+
+            // Page Down: 1 click = scroll down, 2s hold (40 ticks) = jump straight to live chat bottom
+            if (chatDownKey.isPressed()) {
+                downHoldTicks++;
+                if (downHoldTicks == 1) {
+                    LiveChatElement.scrollDown(2);
+                } else if (downHoldTicks == 40) {
+                    LiveChatElement.jumpToLiveBottom();
+                }
+            } else {
+                downHoldTicks = 0;
             }
         });
 

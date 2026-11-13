@@ -40,6 +40,9 @@ public final class ConfigManager {
         public boolean showTimestamp = true;
         public boolean enableEmojiFallback = true;
         public float lineSpacing = 12.0f;
+        public boolean coloredUsernames = true;
+        public boolean coloredMessages = false;
+        public boolean rgbMode = false;
     }
 
     public static final class ConfigPayload {
@@ -50,7 +53,7 @@ public final class ConfigManager {
         public String youtubeApiKey = "";
         public boolean autoConnect = false;
         public int streamRefreshSec = 30;
-        public int maxChatHistory = 100;
+        public int maxChatHistory = 500;
         public ChatSettings chat = new ChatSettings();
         public Map<String, SavedHudEntry> hudElements = new HashMap<>();
     }
@@ -110,6 +113,9 @@ public final class ConfigManager {
                     chat.showTimestamp = data.chat.showTimestamp;
                     chat.enableEmojiFallback = data.chat.enableEmojiFallback;
                     chat.lineSpacing = Math.max(8.0f, Math.min(30.0f, data.chat.lineSpacing));
+                    chat.coloredUsernames = data.chat.coloredUsernames;
+                    chat.coloredMessages = data.chat.coloredMessages;
+                    chat.rgbMode = data.chat.rgbMode;
                 }
             }
         } catch (Exception e) {
@@ -141,6 +147,9 @@ public final class ConfigManager {
                     current.chat.showTimestamp = chat.showTimestamp;
                     current.chat.enableEmojiFallback = chat.enableEmojiFallback;
                     current.chat.lineSpacing = chat.lineSpacing;
+                    current.chat.coloredUsernames = chat.coloredUsernames;
+                    current.chat.coloredMessages = chat.coloredMessages;
+                    current.chat.rgbMode = chat.rgbMode;
                 }
             }
             Files.createDirectories(configFile.getParent());
