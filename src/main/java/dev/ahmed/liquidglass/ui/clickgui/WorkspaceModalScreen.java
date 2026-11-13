@@ -208,6 +208,8 @@ public final class WorkspaceModalScreen extends Screen {
     }
 
     @Override
+    @Override public boolean mouseDragged(Click click, double ox, double oy) { if (streamUrlField.mouseDragged(click.x())) return true; return super.mouseDragged(click, ox, oy); }
+    @Override public boolean mouseReleased(Click click) { streamUrlField.mouseReleased(); return super.mouseReleased(click); }
     public boolean keyPressed(KeyInput input) {
         if (streamUrlField.keyPressed(input)) return true;
         if (input.key() == GLFW.GLFW_KEY_ESCAPE) {
