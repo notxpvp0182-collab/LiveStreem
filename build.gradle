@@ -182,7 +182,7 @@ tasks.named("processResources") {
                                 used[j] = true
                             }
                         }
-                        int finalA = Math.min(63, (aSum / aCnt) >>> 2)
+                        int finalA = Math.min(63, ((int) (aSum / aCnt)) >> 2)
                         int packed = ((y1 & 0x3F) << 26) | ((y2 & 0x3F) << 20) | ((x1 & 0x7F) << 13) | ((x2 & 0x7F) << 6) | finalA
                         mergedRects.add(packed)
                     }
