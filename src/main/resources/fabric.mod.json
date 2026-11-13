@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "liquidglass",
+  "version": "${version}",
+  "name": "LiveStream",
+  "description": "Dark Liquid-Glass YouTube LiveStream HUD, Channel Telemetry & Live Chat Mod for Minecraft 1.21.11.",
+  "authors": ["Ahmed"],
+  "license": "All-Rights-Reserved",
+  "icon": "assets/liquidglass/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["dev.ahmed.liquidglass.LiquidGlassClient"],
+    "modmenu": ["dev.ahmed.liquidglass.compat.ModMenuIntegration"]
+  },
+  "depends": {
+    "fabricloader": "*",
+    "minecraft": "1.21.11",
+    "java": ">=21",
+    "fabric-api": "*",
+    "modmenu": "*"
+  }
+}

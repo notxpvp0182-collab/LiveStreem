@@ -1,0 +1,55 @@
+name: Build & Release LiveStream
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14'
+
+      - name: Build LiveStream Mod JAR
+        run: |
+          VERSION_TAG="v${{ github.run_number }}-1.21.11"
+          gradle build -Prelease_version="${VERSION_TAG}" --no-daemon
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LiveStream-v${{ github.run_number }}-1.21.11
+          path: |
+            build/libs/LiveStream-v${{ github.run_number }}-1.21.11.jar
+
+      - name: Create Automatic GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.run_number }}-1.21.11
+          name: LiveStream v${{ github.run_number }} (1.21.11)
+          body: |
+            Automated build of **LiveStream** for Minecraft **1.21.11** (Fabric).
+            - **File:** `LiveStream-v${{ github.run_number }}-1.21.11.jar`
+          files: |
+            build/libs/LiveStream-v${{ github.run_number }}-1.21.11.jar
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
