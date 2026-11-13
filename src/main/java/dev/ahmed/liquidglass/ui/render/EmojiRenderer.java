@@ -1,5 +1,6 @@
 package dev.ahmed.liquidglass.ui.render;
 
+import dev.ahmed.liquidglass.ui.font.BengaliFontEngine;
 import dev.ahmed.liquidglass.ui.font.SmallCapsRenderer;
 import dev.ahmed.liquidglass.ui.font.WorldLanguageShaper;
 import net.minecraft.client.font.TextRenderer;
@@ -18,12 +19,10 @@ public final class EmojiRenderer {
         int red = UIRenderer.withAlpha(0xFFFF0033, alpha);
         int white = UIRenderer.withAlpha(0xFFFFFFFF, alpha);
 
-        // Sub-pixel smooth rounded YouTube badge (22x16 half-pixels = 11x8 GUI px)
         ctx.fill(3, 1, 19, 15, red);
         ctx.fill(1, 3, 21, 13, red);
         ctx.fill(2, 2, 20, 14, red);
 
-        // Smooth white play triangle
         ctx.fill(8, 4, 10, 12, white);
         ctx.fill(10, 5, 12, 11, white);
         ctx.fill(12, 6, 14, 10, white);
@@ -54,28 +53,38 @@ public final class EmojiRenderer {
 
     public static int measureRichTextWidth(TextRenderer tr, String raw, boolean smallCaps) {
         if (raw == null || raw.isEmpty()) return 0;
-        String shaped = WorldLanguageShaper.shape(smallCaps ? SmallCapsRenderer.toSmallCaps(raw) : raw);
+        String input = smallCaps ? SmallCapsRenderer.toSmallCaps(raw) : raw;
         int width = 0;
-        int len = shaped.length();
-        StringBuilder seg = new StringBuilder();
+        int len = input.length();
+        StringBuilder latinSeg = new StringBuilder();
+        StringBuilder bnSeg = new StringBuilder();
 
         for (int i = 0; i < len; ) {
-            int cp = shaped.codePointAt(i);
+            int cp = input.codePointAt(i);
             int charCount = Character.charCount(cp);
-            if (cp == 0xFE0F || cp == 0xFE0E || cp == 0x200D) {
+            if (cp == 0xFE0F || cp == 0xFE0E) {
                 i += charCount;
                 continue;
             }
-            if (WorldLanguageShaper.isZeroAdvanceCombiningMark(cp)) {
-                i += charCount;
-                continue;
-            }
-            if (isRegionalIndicator(cp)) {
-                if (!seg.isEmpty()) {
-                    width += tr.getWidth(seg.toString());
-                    seg.setLength(0);
+            if (BengaliFontEngine.isBengaliChar(cp)) {
+                if (!latinSeg.isEmpty()) {
+                    width += tr.getWidth(WorldLanguageShaper.shape(latinSeg.toString()));
+                    latinSeg.setLength(0);
                 }
-                if (i + charCount < len && isRegionalIndicator(shaped.codePointAt(i + charCount))) {
+                bnSeg.appendCodePoint(cp);
+                i += charCount;
+                continue;
+            } else if (!bnSeg.isEmpty()) {
+                width += BengaliFontEngine.measureBengaliWidth(bnSeg.toString());
+                bnSeg.setLength(0);
+            }
+
+            if (isRegionalIndicator(cp)) {
+                if (!latinSeg.isEmpty()) {
+                    width += tr.getWidth(WorldLanguageShaper.shape(latinSeg.toString()));
+                    latinSeg.setLength(0);
+                }
+                if (i + charCount < len && isRegionalIndicator(input.codePointAt(i + charCount))) {
                     i += charCount * 2;
                 } else {
                     i += charCount;
@@ -84,18 +93,21 @@ public final class EmojiRenderer {
                 continue;
             }
             if (isColorEmoji(cp)) {
-                if (!seg.isEmpty()) {
-                    width += tr.getWidth(seg.toString());
-                    seg.setLength(0);
+                if (!latinSeg.isEmpty()) {
+                    width += tr.getWidth(WorldLanguageShaper.shape(latinSeg.toString()));
+                    latinSeg.setLength(0);
                 }
                 width += 10;
             } else {
-                seg.appendCodePoint(cp);
+                latinSeg.appendCodePoint(cp);
             }
             i += charCount;
         }
-        if (!seg.isEmpty()) {
-            width += tr.getWidth(seg.toString());
+        if (!bnSeg.isEmpty()) {
+            width += BengaliFontEngine.measureBengaliWidth(bnSeg.toString());
+        }
+        if (!latinSeg.isEmpty()) {
+            width += tr.getWidth(WorldLanguageShaper.shape(latinSeg.toString()));
         }
         return width;
     }
@@ -103,41 +115,45 @@ public final class EmojiRenderer {
     public static float drawRichText(DrawContext ctx, TextRenderer tr, String raw, float x, float y,
                                      int color, boolean smallCaps, boolean shadow) {
         if (raw == null || raw.isEmpty()) return 0.0f;
-        String shaped = WorldLanguageShaper.shape(smallCaps ? SmallCapsRenderer.toSmallCaps(raw) : raw);
+        String input = smallCaps ? SmallCapsRenderer.toSmallCaps(raw) : raw;
         int alpha = (color >>> 24) & 0xFF;
         float cursorX = x;
-        int len = shaped.length();
-        StringBuilder seg = new StringBuilder();
+        int len = input.length();
+        StringBuilder latinSeg = new StringBuilder();
+        StringBuilder bnSeg = new StringBuilder();
 
         for (int i = 0; i < len; ) {
-            int cp = shaped.codePointAt(i);
+            int cp = input.codePointAt(i);
             int charCount = Character.charCount(cp);
-            if (cp == 0xFE0F || cp == 0xFE0E || cp == 0x200D) {
+            if (cp == 0xFE0F || cp == 0xFE0E) {
                 i += charCount;
                 continue;
             }
-            if (WorldLanguageShaper.isZeroAdvanceCombiningMark(cp)) {
-                if (!seg.isEmpty()) {
-                    String s = seg.toString();
+            if (BengaliFontEngine.isBengaliChar(cp)) {
+                if (!latinSeg.isEmpty()) {
+                    String s = WorldLanguageShaper.shape(latinSeg.toString());
                     ctx.drawText(tr, s, Math.round(cursorX), Math.round(y), color, shadow);
                     cursorX += tr.getWidth(s);
-                    seg.setLength(0);
+                    latinSeg.setLength(0);
                 }
-                // Draw Bengali/Indic subscript/superscript mark attached to previous consonant with ZERO width advance
-                drawIndicCombiningMark(ctx, cp, cursorX - 4.5f, y, color);
+                bnSeg.appendCodePoint(cp);
                 i += charCount;
                 continue;
+            } else if (!bnSeg.isEmpty()) {
+                cursorX += BengaliFontEngine.drawBengaliSegment(ctx, bnSeg.toString(), cursorX, y, color, shadow);
+                bnSeg.setLength(0);
             }
+
             if (isRegionalIndicator(cp)) {
-                if (!seg.isEmpty()) {
-                    String s = seg.toString();
+                if (!latinSeg.isEmpty()) {
+                    String s = WorldLanguageShaper.shape(latinSeg.toString());
                     ctx.drawText(tr, s, Math.round(cursorX), Math.round(y), color, shadow);
                     cursorX += tr.getWidth(s);
-                    seg.setLength(0);
+                    latinSeg.setLength(0);
                 }
                 int secondCp = 0;
-                if (i + charCount < len && isRegionalIndicator(shaped.codePointAt(i + charCount))) {
-                    secondCp = shaped.codePointAt(i + charCount);
+                if (i + charCount < len && isRegionalIndicator(input.codePointAt(i + charCount))) {
+                    secondCp = input.codePointAt(i + charCount);
                     i += charCount * 2;
                 } else {
                     i += charCount;
@@ -147,54 +163,28 @@ public final class EmojiRenderer {
                 continue;
             }
             if (isColorEmoji(cp)) {
-                if (!seg.isEmpty()) {
-                    String s = seg.toString();
+                if (!latinSeg.isEmpty()) {
+                    String s = WorldLanguageShaper.shape(latinSeg.toString());
                     ctx.drawText(tr, s, Math.round(cursorX), Math.round(y), color, shadow);
                     cursorX += tr.getWidth(s);
-                    seg.setLength(0);
+                    latinSeg.setLength(0);
                 }
                 drawColorEmojiIcon(ctx, cp, cursorX + 0.5f, y, alpha);
                 cursorX += 10.0f;
             } else {
-                seg.appendCodePoint(cp);
+                latinSeg.appendCodePoint(cp);
             }
             i += charCount;
         }
-        if (!seg.isEmpty()) {
-            String s = seg.toString();
+        if (!bnSeg.isEmpty()) {
+            cursorX += BengaliFontEngine.drawBengaliSegment(ctx, bnSeg.toString(), cursorX, y, color, shadow);
+        }
+        if (!latinSeg.isEmpty()) {
+            String s = WorldLanguageShaper.shape(latinSeg.toString());
             ctx.drawText(tr, s, Math.round(cursorX), Math.round(y), color, shadow);
             cursorX += tr.getWidth(s);
         }
         return cursorX - x;
-    }
-
-    private static void drawIndicCombiningMark(DrawContext ctx, int cp, float x, float y, int color) {
-        if (cp == 0x09CD || cp == 0x094D || cp == 0x09BC || cp == 0x093C) {
-            // Hasanta (্) inside a conjunct: do not draw any distracting standalone glyph or gap
-            return;
-        }
-        Matrix3x2fStack m = ctx.getMatrices();
-        m.pushMatrix();
-        m.translate(x, y);
-        m.scale(0.5f, 0.5f);
-        if (cp == 0x09C1 || cp == 0x0941) {
-            // ু (u-kar) smooth curve under consonant
-            ctx.fill(2, 14, 7, 16, color);
-            ctx.fill(1, 15, 5, 17, color);
-        } else if (cp == 0x09C2 || cp == 0x0942) {
-            // ূ (uu-kar) under consonant
-            ctx.fill(2, 14, 8, 16, color);
-            ctx.fill(5, 16, 8, 18, color);
-        } else if (cp == 0x09C3 || cp == 0x0943) {
-            // ৃ (ri-kar) under consonant
-            ctx.fill(2, 14, 6, 16, color);
-            ctx.fill(2, 16, 5, 17, color);
-        } else if (cp == 0x0981 || cp == 0x0901 || cp == 0x0902) {
-            // ঁ (chandrabindu) above consonant
-            ctx.fill(2, -2, 7, -1, color);
-            ctx.fill(4, -3, 5, -2, color);
-        }
-        m.popMatrix();
     }
 
     private static boolean isRegionalIndicator(int cp) {
@@ -212,18 +202,15 @@ public final class EmojiRenderer {
         String code = "" + c1 + c2;
 
         if ("BD".equals(code)) {
-            // Bangladesh Flag 🇧🇩
             ctx.fill(0, 1, 18, 13, UIRenderer.withAlpha(0xFF006A4E, alpha));
             ctx.fill(6, 4, 11, 10, UIRenderer.withAlpha(0xFFF42A41, alpha));
             ctx.fill(5, 5, 12, 9, UIRenderer.withAlpha(0xFFF42A41, alpha));
         } else if ("IN".equals(code)) {
-            // India Flag 🇮🇳
             ctx.fill(0, 1, 18, 5, UIRenderer.withAlpha(0xFFFF9933, alpha));
             ctx.fill(0, 5, 18, 9, UIRenderer.withAlpha(0xFFFFFFFF, alpha));
             ctx.fill(0, 9, 18, 13, UIRenderer.withAlpha(0xFF138808, alpha));
             ctx.fill(8, 6, 10, 8, UIRenderer.withAlpha(0xFF000080, alpha));
         } else {
-            // Generic colorful flag icon
             ctx.fill(0, 1, 18, 7, UIRenderer.withAlpha(0xFF22C55E, alpha));
             ctx.fill(0, 7, 18, 13, UIRenderer.withAlpha(0xFFFACC15, alpha));
             ctx.fill(5, 4, 13, 10, UIRenderer.withAlpha(0xFF3B82F6, alpha));
@@ -241,7 +228,7 @@ public final class EmojiRenderer {
         Matrix3x2fStack m = ctx.getMatrices();
         m.pushMatrix();
         m.translate(fx, fy);
-        m.scale(0.5f, 0.5f); // 2x sub-pixel resolution (18x18 grid) for ultra-clean non-pixelated emojis
+        m.scale(0.5f, 0.5f);
 
         if (cp == 0x2764 || cp == 0x2665 || (cp >= 0x1F493 && cp <= 0x1F49F) || cp == 0x1F9E1 || cp == 0x1F90D || cp == 0x1F5A4) {
             int hc = switch (cp) {

@@ -62,7 +62,7 @@ public final class ConfigManager {
         public Map<String, SavedHudEntry> hudElements = new HashMap<>();
     }
 
-    private final Path configFile = FabricLoader.getInstance().getConfigDir().resolve("liquidglass.json");
+    private final Path configFile = FabricLoader.getInstance().getConfigDir().resolve("livestream.json");
     private ConfigPayload current = new ConfigPayload();
 
     private ConfigManager() {}
@@ -129,7 +129,7 @@ public final class ConfigManager {
                 }
             }
         } catch (Exception e) {
-            LOGGER.warn("Failed to read liquidglass.json; keeping defaults: {}", e.getMessage());
+            LOGGER.warn("Failed to read livestream.json; keeping defaults: {}", e.getMessage());
         }
     }
 
@@ -168,7 +168,7 @@ public final class ConfigManager {
                 }
             }
             Files.createDirectories(configFile.getParent());
-            Path temp = configFile.resolveSibling("liquidglass.json.tmp");
+            Path temp = configFile.resolveSibling("livestream.json.tmp");
             try (Writer writer = Files.newBufferedWriter(temp)) {
                 GSON.toJson(current, writer);
             }
@@ -178,7 +178,7 @@ public final class ConfigManager {
                 Files.move(temp, configFile, StandardCopyOption.REPLACE_EXISTING);
             }
         } catch (Exception e) {
-            LOGGER.warn("Failed to save liquidglass.json: {}", e.getMessage());
+            LOGGER.warn("Failed to save livestream.json: {}", e.getMessage());
         }
     }
 }

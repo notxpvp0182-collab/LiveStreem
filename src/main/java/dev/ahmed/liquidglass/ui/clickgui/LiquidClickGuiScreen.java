@@ -229,7 +229,7 @@ public final class LiquidClickGuiScreen extends Screen {
             );
 
             int iconColor = UIRenderer.lerpColor(t.textSecondary(), t.accentActive(), hv);
-            IconRenderer.drawIcon(ctx, cats[i].icon(), cx + (cardW - 14) * 0.5f, cardY + 17, 14, iconColor);
+            IconRenderer.drawIcon(ctx, cats[i].icon(), cx + (cardW - 22) * 0.5f, cardY + 14, 22, iconColor);
 
             String label = cats[i].title();
             int lw = this.textRenderer.getWidth(label);

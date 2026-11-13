@@ -14,53 +14,94 @@ public final class IconRenderer {
     private IconRenderer() {}
 
     public static void drawIcon(DrawContext ctx, Icon icon, float x, float y, float size, int color) {
-        Matrix3x2fStack m = ctx.getMatrices();
-        m.pushMatrix();
-        m.translate(x, y);
-        m.scale(0.5f, 0.5f);
-        int s = Math.max(16, Math.round(size * 2.0f));
-        int cx = s / 2;
-        int cy = s / 2;
+        int alpha = (color >>> 24) & 0xFF;
+        int softCol = UIRenderer.withAlpha(color, (int) (alpha * 0.35f));
 
         switch (icon) {
             case BACK -> {
+                Matrix3x2fStack m = ctx.getMatrices();
+                m.pushMatrix();
+                m.translate(x, y);
+                m.scale(0.5f, 0.5f);
+                int s = Math.round(size * 2.0f);
+                int cy = s / 2;
                 ctx.fill(5, cy - 1, s - 4, cy + 1, color);
                 for (int i = 0; i < 6; i++) {
                     ctx.fill(4 + i, cy - i, 6 + i, cy - i + 2, color);
                     ctx.fill(4 + i, cy + i - 1, 6 + i, cy + i + 1, color);
                 }
+                m.popMatrix();
             }
             case LIVE -> {
-                UIRenderer.drawRoundedBorder(ctx, 1, 2, s / 2.0f - 2, s / 2.0f - 4, 3.5f, 1.0f, color);
-                ctx.fill(cx - 3, cy - 4, cx - 1, cy + 4, color);
-                ctx.fill(cx - 1, cy - 3, cx + 1, cy + 3, color);
-                ctx.fill(cx + 1, cy - 2, cx + 3, cy + 2, color);
-                ctx.fill(cx + 3, cy - 1, cx + 4, cy + 1, color);
+                // Premium YouTube Broadcast Play Emblem
+                float w = size;
+                float h = size * 0.78f;
+                float oy = y + (size - h) * 0.5f;
+                UIRenderer.drawRoundedRect(ctx, x + 1.0f, oy + 1.0f, w - 2.0f, h - 2.0f, 5.0f, softCol);
+                UIRenderer.drawRoundedBorder(ctx, x, oy, w, h, 5.5f, 1.0f, color);
+
+                // Smooth Play Triangle in center
+                Matrix3x2fStack m = ctx.getMatrices();
+                m.pushMatrix();
+                m.translate(x + w * 0.38f, oy + h * 0.26f);
+                m.scale(0.5f, 0.5f);
+                int th = Math.round(h * 0.96f);
+                for (int row = 0; row < th; row++) {
+                    int half = th / 2;
+                    int dist = half - Math.abs(half - row);
+                    ctx.fill(0, row, Math.max(1, dist + 1), row + 1, color);
+                }
+                m.popMatrix();
             }
             case DISPLAY, STREAM -> {
-                UIRenderer.drawRoundedBorder(ctx, 1, 1, s / 2.0f - 2, s / 2.0f - 4, 3.0f, 1.0f, color);
-                ctx.fill(5, s - 5, s - 5, s - 3, color);
-                ctx.fill(cx - 2, s - 7, cx + 2, s - 5, color);
+                // Premium HUD Layout Monitor Icon
+                float w = size;
+                float h = size * 0.76f;
+                float oy = y + 1.0f;
+                UIRenderer.drawRoundedBorder(ctx, x, oy, w, h, 4.5f, 1.0f, color);
+                UIRenderer.drawRoundedRect(ctx, x + 3.0f, oy + 3.0f, w * 0.35f, h * 0.32f, 1.5f, color);
+                UIRenderer.drawRoundedRect(ctx, x + w * 0.48f, oy + 3.0f, w - w * 0.48f - 3.0f, h * 0.32f, 1.5f, softCol);
+                UIRenderer.drawRoundedRect(ctx, x + 3.0f, oy + h * 0.55f, w - 6.0f, h * 0.22f, 1.5f, softCol);
+                // Monitor stand
+                UIRenderer.drawRoundedRect(ctx, x + w * 0.30f, oy + h + 2.0f, w * 0.40f, 1.5f, 1.0f, color);
             }
             case PROFILE -> {
-                UIRenderer.drawRoundedRect(ctx, (cx - 4) * 0.5f, 1.5f, 4.0f, 4.0f, 2.0f, color);
-                UIRenderer.drawRoundedRect(ctx, 2.5f, (cy + 2) * 0.5f, (s - 10) * 0.5f, 3.5f, 2.0f, color);
+                // Premium Channel Avatar Badge Icon
+                UIRenderer.drawRoundedBorder(ctx, x + 1.0f, y + 1.0f, size - 2.0f, size - 2.0f, (size - 2.0f) * 0.5f, 1.0f, softCol);
+                float headR = size * 0.32f;
+                UIRenderer.drawRoundedRect(ctx, x + (size - headR) * 0.5f, y + size * 0.18f, headR, headR, headR * 0.5f, color);
+                float bodyW = size * 0.58f;
+                float bodyH = size * 0.25f;
+                UIRenderer.drawRoundedRect(ctx, x + (size - bodyW) * 0.5f, y + size * 0.56f, bodyW, bodyH, bodyH * 0.5f, color);
             }
             case CHAT -> {
-                UIRenderer.drawRoundedBorder(ctx, 1, 1.5f, s / 2.0f - 2, s / 2.0f - 4.5f, 3.5f, 1.0f, color);
-                ctx.fill(6, cy - 3, s - 6, cy - 1, color);
-                ctx.fill(6, cy + 1, s - 9, cy + 3, color);
+                // Premium Rounded Speech Bubble Icon
+                float w = size;
+                float h = size * 0.76f;
+                float oy = y + 1.0f;
+                UIRenderer.drawRoundedRect(ctx, x + 1.0f, oy + 1.0f, w - 2.0f, h - 2.0f, 5.0f, softCol);
+                UIRenderer.drawRoundedBorder(ctx, x, oy, w, h, 5.5f, 1.0f, color);
+                // Message lines inside bubble
+                UIRenderer.drawRoundedRect(ctx, x + 4.0f, oy + h * 0.30f, w - 8.0f, 1.8f, 1.0f, color);
+                UIRenderer.drawRoundedRect(ctx, x + 4.0f, oy + h * 0.58f, w * 0.52f, 1.8f, 1.0f, color);
+                // Bubble tail
+                UIRenderer.drawRoundedRect(ctx, x + 4.0f, oy + h - 0.5f, 4.0f, 3.0f, 1.5f, color);
             }
             case SLIDERS, SETTINGS -> {
-                ctx.fill(3, 5, s - 3, 7, color);
-                ctx.fill(3, cy, s - 3, cy + 2, color);
-                ctx.fill(3, s - 6, s - 3, s - 4, color);
-                ctx.fill(7, 3, 11, 9, color);
-                ctx.fill(s - 11, cy - 2, s - 7, cy + 4, color);
-                ctx.fill(9, s - 8, 13, s - 2, color);
+                // Premium 3-Track Tuning Sliders Icon
+                float y1 = y + size * 0.22f;
+                float y2 = y + size * 0.50f;
+                float y3 = y + size * 0.78f;
+                UIRenderer.drawRoundedRect(ctx, x + 1.0f, y1, size - 2.0f, 1.5f, 1.0f, softCol);
+                UIRenderer.drawRoundedRect(ctx, x + 1.0f, y2, size - 2.0f, 1.5f, 1.0f, softCol);
+                UIRenderer.drawRoundedRect(ctx, x + 1.0f, y3, size - 2.0f, 1.5f, 1.0f, softCol);
+
+                float kw = 4.5f;
+                UIRenderer.drawRoundedRect(ctx, x + size * 0.22f, y1 - 1.5f, kw, kw, kw * 0.5f, color);
+                UIRenderer.drawRoundedRect(ctx, x + size * 0.58f, y2 - 1.5f, kw, kw, kw * 0.5f, color);
+                UIRenderer.drawRoundedRect(ctx, x + size * 0.35f, y3 - 1.5f, kw, kw, kw * 0.5f, color);
             }
-            default -> UIRenderer.drawRoundedBorder(ctx, 2, 2, s / 2.0f - 4, s / 2.0f - 4, 3.0f, 1.0f, color);
+            default -> UIRenderer.drawRoundedBorder(ctx, x + 1.0f, y + 1.0f, size - 2.0f, size - 2.0f, 4.0f, 1.0f, color);
         }
-        m.popMatrix();
     }
 }
