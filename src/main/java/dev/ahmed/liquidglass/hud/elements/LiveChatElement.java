@@ -230,9 +230,9 @@ public final class LiveChatElement extends HudElement {
 
         MatrixStack matrices = ctx.getMatrices();
         matrices.push();
-        matrices.translate(x() + 6 + slideX, drawY + slideY);
+        matrices.translate(x() + 6 + slideX, drawY + slideY, 0.0f);
         if (Math.abs(style().scale - 1.0f) > 0.001f) {
-            matrices.scale(style().scale, style().scale);
+            matrices.scale(style().scale, style().scale, 1.0f);
         }
 
         int prefixW = line.prefixWidth();

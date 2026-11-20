@@ -58,7 +58,7 @@ public final class WorkspaceModalScreen extends Screen {
         float scale = 0.93f + 0.07f * progress;
         MatrixStack matrices = ctx.getMatrices();
         matrices.push();
-        matrices.translate(this.width * 0.5f, this.height * 0.5f + (1.0f - progress) * 10.0f);
+        matrices.translate(this.width * 0.5f, this.height * 0.5f + (1.0f - progress) * 10.0f, 0.0f);
         matrices.scale(scale, scale, 1.0f);
         matrices.translate(-this.width * 0.5f, -this.height * 0.5f, 0.0f);
 
