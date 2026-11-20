@@ -155,10 +155,10 @@ public final class StreamManager {
         long effectiveDelayMs;
         if (chatDelayMs <= 0) {
             // Smooth high-speed animated stream even at 0s delay so batches never dump in 1 frame
-            if (qSize > 16) effectiveDelayMs = 28L;
-            else if (qSize > 8) effectiveDelayMs = 45L;
-            else if (qSize > 3) effectiveDelayMs = 65L;
-            else effectiveDelayMs = 85L;
+            if (qSize > 16) effectiveDelayMs = 95L;
+            else if (qSize > 8) effectiveDelayMs = 150L;
+            else if (qSize > 3) effectiveDelayMs = 210L;
+            else effectiveDelayMs = 260L;
         } else {
             if (qSize > 40) effectiveDelayMs = Math.max(40L, chatDelayMs / 3L);
             else if (qSize > 20) effectiveDelayMs = Math.max(60L, chatDelayMs / 2L);

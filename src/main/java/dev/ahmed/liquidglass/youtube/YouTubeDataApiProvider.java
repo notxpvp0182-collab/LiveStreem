@@ -23,9 +23,9 @@ import java.util.regex.Pattern;
 
 public final class YouTubeDataApiProvider implements StreamDataProvider {
     private static final String WATCH_URL = "https://www.youtube.com/watch?v=";
-    private static final String PLAYER_API_URL = "https://www.youtube.com/youtubei/v1/player?prettyPrint=false";
     private static final String NEXT_API_URL = "https://www.youtube.com/youtubei/v1/next?prettyPrint=false";
     private static final String UPDATED_META_URL = "https://www.youtube.com/youtubei/v1/updated_metadata?prettyPrint=false";
+    private static final String RYD_VOTES_URL = "https://returnyoutubedislikeapi.com/votes?videoId=";
     private static final String USER_AGENT =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
     private static final Pattern NUMBER_PATTERN = Pattern.compile("([0-9]+(?:[.,][0-9]+)?)\\s*([KMBkmb])?");
@@ -38,15 +38,30 @@ public final class YouTubeDataApiProvider implements StreamDataProvider {
 
     private volatile ChannelInfo cachedChannel;
     private volatile VideoInfo lastVideoInfo;
+    private volatile String trackedVideoId = "";
     private volatile String metaContinuation = null;
+    private volatile long cumulativeTotalViews = -1L;
+    private volatile long lastWatchingCount = -1L;
+    private volatile long apiReportedTotalViews = -1L;
     private volatile int pollTick = 0;
 
     public YouTubeDataApiProvider() {}
 
     @Override
     public VideoInfo fetchVideo(String videoId) throws ProviderException {
+        if (!videoId.equals(trackedVideoId)) {
+            trackedVideoId = videoId;
+            cumulativeTotalViews = -1L;
+            lastWatchingCount = -1L;
+            apiReportedTotalViews = -1L;
+            metaContinuation = null;
+            pollTick = 0;
+        }
         int tick = pollTick++;
-        if (lastVideoInfo == null || tick % 6 == 0) {
+        if (tick % 4 == 0) {
+            CompletableFuture.runAsync(() -> refreshRydTotalViews(videoId));
+        }
+        if (lastVideoInfo == null || tick % 5 == 0) {
             return fetchFullWatchPage(videoId);
         }
         try {
@@ -56,25 +71,43 @@ public final class YouTubeDataApiProvider implements StreamDataProvider {
         }
     }
 
+    private void refreshRydTotalViews(String videoId) {
+        try {
+            HttpRequest req = HttpRequest.newBuilder(URI.create(RYD_VOTES_URL + videoId))
+                .timeout(Duration.ofSeconds(4))
+                .header("User-Agent", USER_AGENT)
+                .header("Accept", "application/json")
+                .GET()
+                .build();
+            HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            if (resp.statusCode() == 200) {
+                JsonObject obj = JsonParser.parseString(resp.body()).getAsJsonObject();
+                if (obj.has("viewCount") && !obj.get("viewCount").isJsonNull()) {
+                    long vc = obj.get("viewCount").getAsLong();
+                    if (vc > apiReportedTotalViews) {
+                        apiReportedTotalViews = vc;
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+    }
+
     private VideoInfo fetchFastRealtimeTelemetry(String videoId) throws Exception {
         String webBody = "{\"context\":{\"client\":{\"clientName\":\"WEB\",\"clientVersion\":\"2.20250214.01.00\",\"hl\":\"en\",\"gl\":\"US\"}},\"videoId\":\"" + videoId + "\"}";
-        String vrBody = "{\"context\":{\"client\":{\"clientName\":\"ANDROID_VR\",\"clientVersion\":\"1.60.19\",\"hl\":\"en\",\"gl\":\"US\"}},\"videoId\":\"" + videoId + "\"}";
         String metaBody = (metaContinuation != null && !metaContinuation.isEmpty())
             ? "{\"context\":{\"client\":{\"clientName\":\"WEB\",\"clientVersion\":\"2.20250214.01.00\",\"hl\":\"en\",\"gl\":\"US\"}},\"continuation\":\"" + metaContinuation + "\"}"
             : webBody;
 
-        CompletableFuture<JsonObject> playerFut = CompletableFuture.supplyAsync(() -> postJson(PLAYER_API_URL, vrBody, videoId));
         CompletableFuture<JsonObject> nextFut = CompletableFuture.supplyAsync(() -> postJson(NEXT_API_URL, webBody, videoId));
         CompletableFuture<JsonObject> metaFut = CompletableFuture.supplyAsync(() -> postJson(UPDATED_META_URL, metaBody, videoId));
 
-        JsonObject playerResp = playerFut.get();
         JsonObject nextResp = nextFut.get();
         JsonObject metaResp = metaFut.get();
 
-        if ((playerResp == null || obj(playerResp, "videoDetails") == null) && nextResp == null) {
+        if (nextResp == null && metaResp == null) {
             return fetchFullWatchPage(videoId);
         }
-        return parseCombinedTelemetry(videoId, playerResp, nextResp, metaResp);
+        return parseCombinedTelemetry(videoId, null, nextResp, metaResp);
     }
 
     private VideoInfo fetchFullWatchPage(String videoId) throws ProviderException {
@@ -87,7 +120,7 @@ public final class YouTubeDataApiProvider implements StreamDataProvider {
         return parseCombinedTelemetry(videoId, playerResp, initialData, null);
     }
 
-    private VideoInfo parseCombinedTelemetry(String videoId, JsonObject playerResp, JsonObject initialData, JsonObject metaResp) throws ProviderException {
+    private synchronized VideoInfo parseCombinedTelemetry(String videoId, JsonObject playerResp, JsonObject initialData, JsonObject metaResp) throws ProviderException {
         VideoInfo prev = this.lastVideoInfo;
         String title = prev != null ? prev.title() : "--";
         String channelId = prev != null ? prev.channelId() : "";
@@ -169,19 +202,38 @@ public final class YouTubeDataApiProvider implements StreamDataProvider {
         }
 
         if (watching == null && status == LiveStatus.LIVE) {
-            watching = detailsViews != null ? detailsViews : (prev != null ? prev.concurrentViewers() : null);
+            watching = prev != null && prev.concurrentViewers() != null ? prev.concurrentViewers() : detailsViews;
         }
 
-        Long totalViews = null;
-        if (microViews != null && microViews > 0) totalViews = microViews;
-        if (descTotalViews != null && (totalViews == null || descTotalViews > totalViews)) totalViews = descTotalViews;
-        if (detailsViews != null && (totalViews == null || detailsViews > totalViews)) totalViews = detailsViews;
-        if (prev != null && prev.totalViews() != null && (totalViews == null || prev.totalViews() > totalViews)) {
-            totalViews = prev.totalViews();
+        // Update baseline Total Views from all available cumulative view sources
+        long candidateApiTotal = apiReportedTotalViews;
+        if (microViews != null && microViews > candidateApiTotal && (watching == null || !microViews.equals(watching))) {
+            candidateApiTotal = microViews;
         }
-        if (watching != null && (totalViews == null || watching > totalViews)) {
-            totalViews = watching;
+        if (detailsViews != null && detailsViews > candidateApiTotal && (watching == null || !detailsViews.equals(watching))) {
+            candidateApiTotal = detailsViews;
         }
+        if (descTotalViews != null && descTotalViews > candidateApiTotal) {
+            candidateApiTotal = descTotalViews;
+        }
+        if (candidateApiTotal > cumulativeTotalViews) {
+            cumulativeTotalViews = candidateApiTotal;
+        }
+
+        // Accumulate newly arriving viewers into cumulativeTotalViews so Total Views always grows and never drops with Watching
+        if (watching != null) {
+            if (cumulativeTotalViews < 0) {
+                cumulativeTotalViews = Math.max(watching, candidateApiTotal);
+            } else if (lastWatchingCount >= 0 && watching > lastWatchingCount) {
+                cumulativeTotalViews += (watching - lastWatchingCount);
+            }
+            if (watching > cumulativeTotalViews) {
+                cumulativeTotalViews = watching;
+            }
+            lastWatchingCount = watching;
+        }
+
+        Long finalTotalViews = cumulativeTotalViews >= 0 ? cumulativeTotalViews : (detailsViews != null ? detailsViews : watching);
 
         if (this.cachedChannel == null) {
             this.cachedChannel = new ChannelInfo(channelId, author, "--", null, null);
@@ -189,7 +241,7 @@ public final class YouTubeDataApiProvider implements StreamDataProvider {
 
         VideoInfo info = new VideoInfo(
             videoId, title, channelId, author, status,
-            watching, totalViews, likes, startMs,
+            watching, finalTotalViews, likes, startMs,
             status == LiveStatus.LIVE ? videoId : null
         );
         this.lastVideoInfo = info;

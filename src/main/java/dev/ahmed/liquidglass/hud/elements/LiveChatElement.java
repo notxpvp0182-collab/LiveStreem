@@ -60,7 +60,7 @@ public final class LiveChatElement extends HudElement {
     public int timestampColor = 0xFF8A909E;
     public int maxVisibleMessages = 14;
     public float lineSpacing = 13.0f;
-    public float entranceDurationSec = 0.52f;
+    public float entranceDurationSec = 0.58f;
 
     private static volatile int scrollLineOffset = 0;
 
@@ -85,6 +85,7 @@ public final class LiveChatElement extends HudElement {
     private boolean cachedShowUser = true;
     private boolean cachedShowYt = true;
     private boolean cachedSmallCaps = false;
+    private boolean initialHistorySeeded = false;
 
     private float scrollPushPx = 0.0f;
     private long lastRenderNs = System.nanoTime();
@@ -93,6 +94,7 @@ public final class LiveChatElement extends HudElement {
     public LiveChatElement() {
         super("live_chat", "Live Chat", 12, 145, 290, 155, true);
         style().backgroundEnabled = false;
+        style().animationEnabled = true;
     }
 
     public static String styleNameFor(int index1To6) {
@@ -109,9 +111,27 @@ public final class LiveChatElement extends HudElement {
 
     public void setAnimStyleIndex(int index1To6) {
         int i = Math.max(0, Math.min(ANIM_IDS.length - 1, index1To6 - 1));
-        this.chatAnimStyle = ANIM_IDS[i];
-        if (!lastTopMsgId.isEmpty()) {
-            firstRenderNsMap.put(lastTopMsgId, System.nanoTime());
+        String nextStyle = ANIM_IDS[i];
+        if (!nextStyle.equalsIgnoreCase(this.chatAnimStyle)) {
+            this.chatAnimStyle = nextStyle;
+            replayVisibleAnimations();
+        }
+    }
+
+    public void replayVisibleAnimations() {
+        long now = System.nanoTime();
+        List<DisplayLine> lines = this.cachedLines;
+        if (lines.isEmpty()) {
+            firstRenderNsMap.clear();
+            return;
+        }
+        int lastMsgIdx = lines.get(lines.size() - 1).msgIndex();
+        int startMsgIdx = Math.max(0, lastMsgIdx - 5);
+        for (DisplayLine dl : lines) {
+            if (dl.msgIndex() >= startMsgIdx) {
+                long staggerNs = (dl.msgIndex() - startMsgIdx) * 90_000_000L;
+                firstRenderNsMap.put(dl.msg().id(), now + staggerNs);
+            }
         }
     }
 
@@ -145,17 +165,18 @@ public final class LiveChatElement extends HudElement {
 
         List<StreamManager.ChatMessage> snapshot;
         if (queue.isEmpty()) {
+            initialHistorySeeded = false;
             if (!inHudEditor) {
                 UIRenderer.drawText(ctx, "Live chat waiting for messages...", x() + 8, y() + 8,
                     t.textMuted(), style().scale, style().smallCaps, textShadow);
                 ctx.disableScissor();
                 return;
             }
-            long cycleId = System.currentTimeMillis() / 2200L;
+            long cycleId = System.currentTimeMillis() / 2000L;
             snapshot = List.of(
                 new StreamManager.ChatMessage("p1", "Viewer_01", "Scroll here to resize chat text! 🔥", System.currentTimeMillis(), nowNs, false, false, false),
                 new StreamManager.ChatMessage("p2", "Moderator", "Left-side smooth chat animation ✨", System.currentTimeMillis(), nowNs, false, true, false),
-                new StreamManager.ChatMessage("p3_" + cycleId, "Streamer", String.format(Locale.ROOT, "Text Size: %.2fx (Anim Preview)", style().scale), System.currentTimeMillis(), nowNs, true, false, false)
+                new StreamManager.ChatMessage("p3_" + cycleId, "Streamer", String.format(Locale.ROOT, "Text Size: %.2fx (Left Slide)", style().scale), System.currentTimeMillis(), nowNs, true, false, false)
             );
         } else {
             snapshot = new ArrayList<>(queue);
@@ -163,7 +184,7 @@ public final class LiveChatElement extends HudElement {
 
         TextRenderer tr = MinecraftClient.getInstance().textRenderer;
         int availWidth = Math.max(60, Math.round((width() - 14.0f) / Math.max(0.45f, style().scale)));
-        int currentTotal = queue.isEmpty() ? (int) (System.currentTimeMillis() / 2200L) : StreamManager.get().totalChatReceived();
+        int currentTotal = queue.isEmpty() ? (int) (System.currentTimeMillis() / 2000L) : StreamManager.get().totalChatReceived();
         float stepY = lineSpacing * style().scale;
 
         if (currentTotal != cachedTotalReceived
@@ -185,16 +206,27 @@ public final class LiveChatElement extends HudElement {
             cachedShowYt = showYouTubeIcon;
             cachedSmallCaps = style().smallCaps;
 
+            if (!queue.isEmpty() && !initialHistorySeeded) {
+                initialHistorySeeded = true;
+                int n = snapshot.size();
+                for (int i = 0; i < n; i++) {
+                    String id = snapshot.get(i).id();
+                    if (i < Math.max(0, n - 4)) {
+                        firstRenderNsMap.put(id, nowNs - 10_000_000_000L);
+                    } else {
+                        long stagger = (i - Math.max(0, n - 4)) * 110_000_000L;
+                        firstRenderNsMap.put(id, nowNs + stagger);
+                    }
+                }
+            }
+
             List<DisplayLine> built = new ArrayList<>(snapshot.size() * 2);
             int latestMsgLineCount = 0;
 
             for (int mIdx = 0; mIdx < snapshot.size(); mIdx++) {
                 StreamManager.ChatMessage msg = snapshot.get(mIdx);
-                if (mIdx < snapshot.size() - 1) {
-                    firstRenderNsMap.putIfAbsent(msg.id(), nowNs - 10_000_000_000L);
-                } else {
-                    firstRenderNsMap.putIfAbsent(msg.id(), nowNs);
-                }
+                // Every newly arrived message gets its exact first render timestamp and never gets overwritten
+                firstRenderNsMap.putIfAbsent(msg.id(), nowNs);
 
                 String ts = showTimestamp ? (TIME_FMT.format(Instant.ofEpochMilli(msg.timestampMs())) + " ") : "";
                 String author = showUsername ? formatAuthorColumn(msg.author()) : "";
@@ -208,7 +240,7 @@ public final class LiveChatElement extends HudElement {
                     return wrapTextToWidth(tr, body, lineAvail, lineAvail);
                 });
                 if (wrapCache.size() > 600) wrapCache.clear();
-                if (firstRenderNsMap.size() > 800) firstRenderNsMap.clear();
+                if (firstRenderNsMap.size() > 900) firstRenderNsMap.clear();
 
                 if (mIdx == snapshot.size() - 1) {
                     latestMsgLineCount = wrapped.size();
@@ -228,9 +260,8 @@ public final class LiveChatElement extends HudElement {
             if (!snapshot.isEmpty()) {
                 String newestId = snapshot.get(snapshot.size() - 1).id();
                 if (!newestId.equals(lastTopMsgId)) {
-                    firstRenderNsMap.put(newestId, nowNs);
-                    if (!lastTopMsgId.isEmpty() && style().animationEnabled && scrollLineOffset == 0) {
-                        scrollPushPx = Math.min(height() * 0.4f, scrollPushPx + Math.max(1, latestMsgLineCount) * stepY);
+                    if (!lastTopMsgId.isEmpty()) {
+                        scrollPushPx = Math.min(height() * 0.35f, scrollPushPx + Math.max(1, latestMsgLineCount) * stepY);
                     }
                     lastTopMsgId = newestId;
                 }
@@ -263,7 +294,6 @@ public final class LiveChatElement extends HudElement {
             float baseDrawY = y() + height() - 13.0f - (scrollLineOffset > 0 ? 12.0f : 0.0f);
             for (int i = bottomLineIdx; i >= 0; i--) {
                 DisplayLine dl = allWrappedLines.get(i);
-                // Only apply scrollPushPx to older messages so the newest message stays inside the bottom scissor bound
                 float lineY = baseDrawY + (dl.msgIndex() < newestMsgIdx ? scrollPushPx : 0.0f);
                 if (lineY < y() - stepY) break;
                 drawSingleDisplayLine(ctx, tr, dl, lineY, nowNs);
@@ -303,16 +333,17 @@ public final class LiveChatElement extends HudElement {
     private void drawSingleDisplayLine(DrawContext ctx, TextRenderer tr, DisplayLine line, float drawY, long nowNs) {
         StreamManager.ChatMessage msg = line.msg();
         long startNs = firstRenderNsMap.computeIfAbsent(msg.id(), k -> nowNs);
-        float duration = Math.max(0.20f, entranceDurationSec / Math.max(0.5f, chatAnimSpeed));
-        float ageSec = Math.max(0.0f, (nowNs - startNs) / 1_000_000_000.0f);
-        float rawT = (style().animationEnabled && scrollLineOffset == 0 && ageSec < duration)
-            ? Math.max(0.0f, Math.min(1.0f, ageSec / duration))
-            : 1.0f;
+        if (nowNs < startNs) return; // Waiting for stagger delay
+
+        float duration = Math.max(0.24f, entranceDurationSec / Math.max(0.4f, chatAnimSpeed));
+        float ageSec = (nowNs - startNs) / 1_000_000_000.0f;
+        float rawT = ageSec < duration ? Math.max(0.0f, Math.min(1.0f, ageSec / duration)) : 1.0f;
 
         float easeCubic = 1.0f - (float) Math.pow(1.0f - rawT, 3);
         float easeQuart = 1.0f - (float) Math.pow(1.0f - rawT, 4);
-        float easeBack = 1.0f + 1.9f * (float) Math.pow(rawT - 1.0f, 3) + 0.9f * (float) Math.pow(rawT - 1.0f, 2);
+        float easeBack = 1.0f + 2.2f * (float) Math.pow(rawT - 1.0f, 3) + 1.2f * (float) Math.pow(rawT - 1.0f, 2);
 
+        float leftSpan = Math.max(135.0f, width() * 0.62f);
         float slideX = 0.0f;
         float slideY = 0.0f;
         float popScale = 1.0f;
@@ -320,31 +351,33 @@ public final class LiveChatElement extends HudElement {
         if (rawT < 1.0f) {
             switch (chatAnimStyle) {
                 case "LIQUID_POP" -> {
-                    slideX = (1.0f - easeCubic) * -90.0f;
-                    popScale = 0.78f + 0.22f * easeBack;
+                    slideX = (1.0f - easeCubic) * -(leftSpan * 0.85f);
+                    popScale = 0.68f + 0.32f * easeBack;
                 }
                 case "SLIDE_SIDE" -> {
-                    slideX = (1.0f - easeBack) * -125.0f;
+                    slideX = (1.0f - easeBack) * -leftSpan;
                 }
                 case "BOUNCE" -> {
-                    slideX = (1.0f - easeBack) * -110.0f;
-                    slideY = -(float) Math.sin(rawT * Math.PI) * 3.5f;
+                    slideX = (1.0f - easeBack) * -(leftSpan * 0.90f);
+                    slideY = -(float) Math.sin(rawT * Math.PI) * 5.0f;
                 }
                 case "CASCADE" -> {
-                    slideX = (1.0f - easeQuart) * -130.0f;
-                    slideY = (1.0f - easeCubic) * -4.0f;
-                    popScale = 0.88f + 0.12f * easeCubic;
+                    slideX = (1.0f - easeQuart) * -leftSpan;
+                    slideY = (1.0f - easeCubic) * -4.5f;
+                    popScale = 0.84f + 0.16f * easeCubic;
                 }
                 case "SMOOTH_FADE" -> {
-                    slideX = (1.0f - easeCubic) * -55.0f;
+                    slideX = (1.0f - easeCubic) * -(leftSpan * 0.55f);
                 }
-                default -> { // SLIDE_UP -> Smooth Left-to-Right Slide
-                    slideX = (1.0f - easeCubic) * -115.0f;
+                default -> { // SLIDE_UP -> Full Left-to-Right Smooth Slide
+                    slideX = (1.0f - easeCubic) * -leftSpan;
                 }
             }
         }
 
-        int alpha = Math.max(25, Math.min(255, Math.round(255.0f * easeCubic)));
+        int alpha = rawT < 1.0f
+            ? Math.max(20, Math.min(255, Math.round(255.0f * Math.min(1.0f, rawT * 1.6f))))
+            : 255;
         float finalScale = style().scale * popScale;
 
         MatrixStack matrices = ctx.getMatrices();
@@ -360,6 +393,11 @@ public final class LiveChatElement extends HudElement {
             float lineStartX = line.isFirstLine() ? -2.5f : (prefixW - 2.5f);
             float pillW = (prefixW + line.contentWidth() + 5.0f) - lineStartX;
             UIRenderer.drawRoundedRect(ctx, lineStartX, -1.5f, Math.max(12.0f, pillW), 11.0f, 3.5f, (bgAlpha << 24) | 0x0B0E14);
+        }
+
+        if (rawT < 0.92f && line.isFirstLine()) {
+            int glowA = Math.round((1.0f - rawT) * 220.0f);
+            UIRenderer.drawRoundedRect(ctx, -4.0f, -1.0f, 2.0f, 9.5f, 1.0f, (glowA << 24) | 0x5CE1E6);
         }
 
         float cursorX = 0.0f;
