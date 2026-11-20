@@ -138,7 +138,7 @@ public final class WorkspaceModalScreen extends Screen {
         drawTelemetryCard(ctx, mainX + 20 + cardW, mainY + 120, cardW, 42,
             "Subscribers", snap.subscriberCount() != null ? HudManager.formatCompactNumber(snap.subscriberCount()) : "--");
         drawTelemetryCard(ctx, mainX + 12, mainY + 170, cardW, 42,
-            "Live Viewers", snap.viewerCount() != null ? HudManager.formatCompactNumber(snap.viewerCount()) : "--");
+            "Watching / Views", (snap.watchingCount() != null ? HudManager.formatCompactNumber(snap.watchingCount()) : "--") + " / " + (snap.viewerCount() != null ? HudManager.formatCompactNumber(snap.viewerCount()) : "--"));
         drawTelemetryCard(ctx, mainX + 20 + cardW, mainY + 170, cardW, 42,
             "Likes", snap.likeCount() != null ? HudManager.formatCompactNumber(snap.likeCount()) : "--");
 

@@ -2,7 +2,6 @@ package dev.ahmed.liquidglass.stream;
 
 import dev.ahmed.liquidglass.stream.StreamDataProvider.ChannelInfo;
 import dev.ahmed.liquidglass.stream.StreamDataProvider.ChatBatch;
-import dev.ahmed.liquidglass.stream.StreamDataProvider.LiveStatus;
 import dev.ahmed.liquidglass.stream.StreamDataProvider.VideoInfo;
 import dev.ahmed.liquidglass.youtube.YouTubeDataApiProvider;
 import org.slf4j.Logger;
@@ -11,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -39,12 +39,13 @@ public final class StreamManager {
         Long subscriberCount,
         String streamTitle,
         Long viewerCount,
+        Long watchingCount,
         Long likeCount,
         long streamStartEpochMs,
         String statusMessage
     ) {
         public static StreamSnapshot disconnected() {
-            return new StreamSnapshot(ConnectionState.DISCONNECTED, "", "--", "--", null, "--", null, null, 0L, "Not connected");
+            return new StreamSnapshot(ConnectionState.DISCONNECTED, "", "--", "--", null, "--", null, null, null, 0L, "Not connected");
         }
     }
 
@@ -64,24 +65,25 @@ public final class StreamManager {
     private static final Pattern BARE_ID = Pattern.compile("^[A-Za-z0-9_-]{11}$");
 
     private static final int MAX_RETRIES = 8;
-    private static final long MIN_CHAT_POLL_MS = 2_500L;
-    private static final int SEEN_IDS_LIMIT = 800;
+    private static final long FAST_TELEMETRY_MS = 800L;
+    private static final long MIN_CHAT_POLL_MS = 1_000L;
+    private static final int SEEN_IDS_LIMIT = 1000;
 
     private static final StreamManager INSTANCE = new StreamManager();
 
     private final AtomicReference<StreamSnapshot> snapshotRef = new AtomicReference<>(StreamSnapshot.disconnected());
     private final Deque<ChatMessage> chatBuffer = new ConcurrentLinkedDeque<>();
     private final Deque<ChatMessage> pendingDelayQueue = new ConcurrentLinkedDeque<>();
-    private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(r -> {
+    private final ScheduledExecutorService executor = Executors.newScheduledThreadPool(3, r -> {
         Thread t = new Thread(r, "LiquidGlass-StreamWorker");
         t.setDaemon(true);
         return t;
     });
 
     private volatile String lastUrl = "";
-    private volatile int refreshIntervalSec = 25;
+    private volatile int refreshIntervalSec = 1;
     private volatile int maxChatHistory = 500;
-    private volatile int chatDelayMs = 0; // 0 = Instant YouTube real-time speed
+    private volatile int chatDelayMs = 0;
     private volatile long lastPacedReleaseMs = 0L;
     private volatile int totalChatReceived = 0;
     private volatile long lastSuccessEpochMs = 0L;
@@ -116,7 +118,7 @@ public final class StreamManager {
         }
         Session s = new Session(id.get(), new YouTubeDataApiProvider());
         this.session = s;
-        snapshotRef.set(new StreamSnapshot(ConnectionState.CONNECTING, id.get(), "--", "--", null, "--", null, null, 0L,
+        snapshotRef.set(new StreamSnapshot(ConnectionState.CONNECTING, id.get(), "--", "--", null, "--", null, null, null, 0L,
             "Connecting to stream..."));
         s.schedule(s::refreshVideo, 0L);
     }
@@ -139,35 +141,32 @@ public final class StreamManager {
     }
 
     private static StreamSnapshot error(String id, String message) {
-        return new StreamSnapshot(ConnectionState.ERROR, id, "--", "--", null, "--", null, null, 0L, message);
+        return new StreamSnapshot(ConnectionState.ERROR, id, "--", "--", null, "--", null, null, null, 0L, message);
     }
 
     private void enqueueIncomingChat(ChatMessage msg) {
-        if (chatDelayMs <= 0) {
-            commitToChatBuffer(new ChatMessage(
-                msg.id(), msg.author(), msg.content(), msg.timestampMs(),
-                System.nanoTime(), msg.owner(), msg.moderator(), msg.member()
-            ));
-        } else {
-            while (pendingDelayQueue.size() >= 300) pendingDelayQueue.pollFirst();
-            pendingDelayQueue.offerLast(msg);
-        }
+        while (pendingDelayQueue.size() >= 400) pendingDelayQueue.pollFirst();
+        pendingDelayQueue.offerLast(msg);
     }
 
     public void tickChatPacing() {
         if (pendingDelayQueue.isEmpty()) return;
+        int qSize = pendingDelayQueue.size();
+        long effectiveDelayMs;
         if (chatDelayMs <= 0) {
-            ChatMessage m;
-            while ((m = pendingDelayQueue.pollFirst()) != null) {
-                commitToChatBuffer(new ChatMessage(
-                    m.id(), m.author(), m.content(), m.timestampMs(),
-                    System.nanoTime(), m.owner(), m.moderator(), m.member()
-                ));
-            }
-            return;
+            // Smooth high-speed animated stream even at 0s delay so batches never dump in 1 frame
+            if (qSize > 16) effectiveDelayMs = 28L;
+            else if (qSize > 8) effectiveDelayMs = 45L;
+            else if (qSize > 3) effectiveDelayMs = 65L;
+            else effectiveDelayMs = 85L;
+        } else {
+            if (qSize > 40) effectiveDelayMs = Math.max(40L, chatDelayMs / 3L);
+            else if (qSize > 20) effectiveDelayMs = Math.max(60L, chatDelayMs / 2L);
+            else effectiveDelayMs = chatDelayMs;
         }
+
         long nowMs = System.currentTimeMillis();
-        if (nowMs - lastPacedReleaseMs >= chatDelayMs) {
+        if (nowMs - lastPacedReleaseMs >= effectiveDelayMs) {
             ChatMessage m = pendingDelayQueue.pollFirst();
             if (m != null) {
                 lastPacedReleaseMs = nowMs;
@@ -194,7 +193,7 @@ public final class StreamManager {
     public long lastSuccessEpochMs() { return lastSuccessEpochMs; }
     public void setMaxChatHistory(int value) { this.maxChatHistory = Math.max(10, Math.min(1000, value)); }
     public int refreshIntervalSec() { return refreshIntervalSec; }
-    public void setRefreshIntervalSec(int value) { this.refreshIntervalSec = Math.max(15, Math.min(300, value)); }
+    public void setRefreshIntervalSec(int value) { this.refreshIntervalSec = Math.max(1, Math.min(300, value)); }
     public int chatDelayMs() { return chatDelayMs; }
     public void setChatDelayMs(int delayMs) { this.chatDelayMs = Math.max(0, Math.min(3000, delayMs)); }
 
@@ -213,6 +212,7 @@ public final class StreamManager {
         private String chatId;
         private String pageToken;
         private boolean chatRunning = false;
+        private boolean firstChatBatch = true;
         private String chatNote = "";
 
         Session(String videoId, StreamDataProvider provider) {
@@ -266,11 +266,11 @@ public final class StreamManager {
                         chatNote = "no live chat";
                         publish(ConnectionState.LIVE, "Live");
                     }
-                    schedule(this::refreshVideo, refreshIntervalSec * 1000L);
+                    schedule(this::refreshVideo, FAST_TELEMETRY_MS);
                 }
                 case UPCOMING -> {
                     publish(ConnectionState.OFFLINE, "Stream has not started yet");
-                    schedule(this::refreshVideo, Math.max(30, refreshIntervalSec) * 1000L);
+                    schedule(this::refreshVideo, 3_000L);
                 }
                 case ENDED -> publish(ConnectionState.OFFLINE, "Stream has ended");
                 case NOT_LIVE -> publish(ConnectionState.OFFLINE, "This video is not a live stream");
@@ -287,17 +287,28 @@ public final class StreamManager {
                 chatFailures = 0;
                 pageToken = batch.nextPageToken();
                 lastSuccessEpochMs = System.currentTimeMillis();
-                for (ChatMessage msg : batch.messages()) {
+                List<ChatMessage> msgs = batch.messages();
+                int n = msgs.size();
+                for (int i = 0; i < n; i++) {
+                    ChatMessage msg = msgs.get(i);
                     if (!seenIds.add(msg.id())) continue;
                     seenOrder.addLast(msg.id());
                     if (seenOrder.size() > SEEN_IDS_LIMIT) seenIds.remove(seenOrder.pollFirst());
-                    enqueueIncomingChat(msg);
+                    if (firstChatBatch && i < Math.max(0, n - 5)) {
+                        commitToChatBuffer(new ChatMessage(
+                            msg.id(), msg.author(), msg.content(), msg.timestampMs(),
+                            System.nanoTime() - 2_000_000_000L, msg.owner(), msg.moderator(), msg.member()
+                        ));
+                    } else {
+                        enqueueIncomingChat(msg);
+                    }
                 }
+                firstChatBatch = false;
                 if (!chatNote.isEmpty()) {
                     chatNote = "";
                     publish(ConnectionState.LIVE, "Live");
                 }
-                schedule(this::pollChat, Math.max(MIN_CHAT_POLL_MS, batch.pollIntervalMs()));
+                schedule(this::pollChat, Math.max(MIN_CHAT_POLL_MS, Math.min(1_400L, batch.pollIntervalMs())));
             } catch (ProviderException e) {
                 handleChatFailure(e);
             }
@@ -305,7 +316,7 @@ public final class StreamManager {
 
         private void handleChatFailure(ProviderException e) {
             if (e.isRetryable() && ++chatFailures <= MAX_RETRIES) {
-                long delay = Math.min(30L, 1L << Math.min(5, chatFailures));
+                long delay = Math.min(10L, 1L << Math.min(4, chatFailures));
                 chatNote = "chat retrying in " + delay + "s";
                 publish(ConnectionState.LIVE, "Live");
                 schedule(this::pollChat, delay * 1000L);
@@ -313,14 +324,14 @@ public final class StreamManager {
                 chatRunning = false;
                 chatId = null;
                 pageToken = null;
-                schedule(this::refreshVideo, 3_000L);
+                schedule(this::refreshVideo, 1_500L);
             }
         }
 
         private void handleFailure(ProviderException e, Runnable retryTask) {
             if (e.kind() == ProviderException.Kind.CANCELLED) return;
             if (e.isRetryable() && ++failures <= MAX_RETRIES) {
-                long delay = Math.min(60L, 1L << Math.min(6, failures));
+                long delay = Math.min(15L, 1L << Math.min(4, failures));
                 publish(ConnectionState.RECONNECTING,
                     e.getMessage() + " Retrying in " + delay + "s...");
                 schedule(retryTask, delay * 1000L);
@@ -341,11 +352,14 @@ public final class StreamManager {
                 : (video != null && video.channelTitle() != null ? video.channelTitle() : "--");
             String handle = channel != null && channel.handle() != null ? channel.handle() : "--";
             String text = chatNote.isEmpty() || !live ? message : message + " (" + chatNote + ")";
+            Long totalViews = video != null ? (video.totalViews() != null ? video.totalViews() : video.concurrentViewers()) : null;
+            Long watching = live && video != null ? video.concurrentViewers() : null;
             snapshotRef.set(new StreamSnapshot(
                 state, videoId, channelName, handle,
                 channel != null ? channel.subscriberCount() : null,
                 title,
-                live && video != null ? video.concurrentViewers() : null,
+                totalViews,
+                watching,
                 video != null ? video.likeCount() : null,
                 video != null ? video.actualStartEpochMs() : 0L,
                 text));

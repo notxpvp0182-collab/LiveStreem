@@ -99,7 +99,7 @@ public final class LiquidClickGuiScreen extends Screen {
         switch (cat) {
             case HUD -> {
                 for (HudElement el : HudManager.get().elements()) {
-                    if (el.id().equals("live_indicator") || el.id().equals("viewer_count")
+                    if (el.id().equals("live_indicator") || el.id().equals("viewer_count") || el.id().equals("live_watching")
                         || el.id().equals("like_count") || el.id().equals("stream_duration")
                         || el.id().equals("stream_title") || el.id().equals("connection_status")) {
                         activeToggles.add(new GlassToggle(el.displayName(), el::isEnabled, el::setEnabled));
@@ -124,7 +124,7 @@ public final class LiquidClickGuiScreen extends Screen {
                         activeSliders.add(new GlassSlider("Chat Delay", 0.0, 2.0, 0.1, "s",
                             () -> StreamManager.get().chatDelayMs() / 1000.0,
                             sec -> StreamManager.get().setChatDelayMs((int) Math.round(sec * 1000.0))));
-                        activeSliders.add(new GlassSlider("Chat Text Size", 0.7, 1.8, 0.1, "x",
+                        activeSliders.add(new GlassSlider("Animation", 1.0, 6.0, 1.0, "@STYLE", () -> chat.getAnimStyleIndex(), val -> chat.setAnimStyleIndex((int) Math.round(val)))); activeSliders.add(new GlassSlider("Anim Speed", 0.5, 2.5, 0.1, "x", () -> chat.chatAnimSpeed, val -> chat.chatAnimSpeed = (float) val)); activeSliders.add(new GlassSlider("Chat Text Size", 0.7, 1.8, 0.1, "x",
                             () -> chat.style().scale,
                             val -> chat.style().scale = (float) val));
                         activeToggles.add(new GlassToggle("Text Shadow", () -> chat.textShadow, v -> chat.textShadow = v));

@@ -53,7 +53,7 @@ public final class GlassSlider {
             UIRenderer.lerpColor(t.borderBase(), t.borderActive(), hv * 0.7f));
 
         UIRenderer.drawText(ctx, label, x + 9.0f, y + 4.0f, t.textSecondary(), 1.0f, false, false);
-        String formatted = (step >= 1.0 ? String.valueOf(Math.round(currentVal)) : String.format(Locale.ROOT, "%.1f", currentVal)) + suffix;
+        String formatted = "@STYLE".equals(suffix) ? dev.ahmed.liquidglass.hud.elements.LiveChatElement.styleNameFor((int) Math.round(currentVal)) : ((step >= 1.0 ? String.valueOf(Math.round(currentVal)) : String.format(Locale.ROOT, "%.1f", currentVal)) + suffix);
         int valW = MinecraftClient.getInstance().textRenderer.getWidth(formatted);
         UIRenderer.drawText(ctx, formatted, x + w - valW - 9.0f, y + 4.0f, t.textPrimary(), 1.0f, false, false);
 

@@ -13,7 +13,7 @@ public interface StreamDataProvider {
         String channelId,
         String channelTitle,
         LiveStatus status,
-        Long concurrentViewers,
+        Long concurrentViewers, Long totalViews,
         Long likeCount,
         long actualStartEpochMs,
         String activeLiveChatId

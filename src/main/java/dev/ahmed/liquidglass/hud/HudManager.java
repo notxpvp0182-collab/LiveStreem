@@ -32,7 +32,7 @@ public final class HudManager {
                 ThemeTokens t = ThemeManager.get().tokens();
                 var snap = StreamManager.get().snapshot();
                 boolean isLive = snap.state() == StreamManager.ConnectionState.LIVE;
-                float pulse = isLive ? (float) (0.65 + 0.35 * Math.sin(System.currentTimeMillis() / 260.0)) : 0.4f;
+                float pulse = isLive ? (float) (0.65 + 0.35 * Math.sin(System.currentTimeMillis() / 220.0)) : 0.4f;
                 int dotColor = isLive ? UIRenderer.withAlpha(0xFFFC8181, (int) (255 * pulse)) : t.textMuted();
                 UIRenderer.drawRoundedRect(ctx, x() + 7, y() + 7, 6, 6, 3.0f, dotColor);
                 UIRenderer.drawText(ctx, isLive ? "LIVE" : snap.state().name(),
@@ -40,12 +40,27 @@ public final class HudManager {
             }
         });
 
-        elements.add(metricElement("viewer_count", "Viewer Count", 78, 12, 86, 20, true, () -> {
+        elements.add(new HudElement("live_watching", "Live Watching", 78, 12, 102, 20, true) {
+            @Override
+            protected void renderContent(DrawContext ctx) {
+                var snap = StreamManager.get().snapshot();
+                boolean isLive = snap.state() == StreamManager.ConnectionState.LIVE;
+                float pulse = isLive ? (float) (0.60 + 0.40 * Math.sin(System.currentTimeMillis() / 180.0)) : 0.35f;
+                int dotCol = isLive ? UIRenderer.withAlpha(0xFF4ADE80, (int) (255 * pulse)) : 0xFF707581;
+                UIRenderer.drawRoundedRect(ctx, x() + 7, y() + (height() - 5) * 0.5f, 5, 5, 2.5f, dotCol);
+                Long w = snap.watchingCount();
+                String txt = "Watching: " + (w != null ? formatCompactNumber(w) : "--");
+                UIRenderer.drawText(ctx, txt, x() + 16, y() + (height() - 8) * 0.5f,
+                    style().textColor, style().scale, style().smallCaps, false);
+            }
+        });
+
+        elements.add(metricElement("viewer_count", "Total Views", 184, 12, 96, 20, true, () -> {
             Long v = StreamManager.get().snapshot().viewerCount();
-            return "Viewers: " + (v != null ? formatCompactNumber(v) : "--");
+            return "Views: " + (v != null ? formatCompactNumber(v) : "--");
         }));
 
-        elements.add(metricElement("like_count", "Like Count", 168, 12, 78, 20, true, () -> {
+        elements.add(metricElement("like_count", "Like Count", 284, 12, 84, 20, true, () -> {
             Long l = StreamManager.get().snapshot().likeCount();
             return "Likes: " + (l != null ? formatCompactNumber(l) : "--");
         }));
@@ -94,9 +109,8 @@ public final class HudManager {
     }
 
     public static String formatCompactNumber(long count) {
-        if (count < 1_000L) return String.valueOf(count);
-        if (count < 1_000_000L) return String.format(Locale.ROOT, "%.1fK", count / 1_000.0);
-        return String.format(Locale.ROOT, "%.1fM", count / 1_000_000.0);
+        if (count < 10_000_000L) return String.format(Locale.ROOT, "%,d", count);
+        return String.format(Locale.ROOT, "%.2fM", count / 1_000_000.0);
     }
 
     public void renderHud(DrawContext ctx) {
@@ -120,10 +134,11 @@ public final class HudManager {
             switch (profileName) {
                 case "Streaming" -> el.setEnabled(true);
                 case "Minimal" -> el.setEnabled(
-                    el.id().equals("live_indicator") || el.id().equals("viewer_count") || el.id().equals("live_chat")
+                    el.id().equals("live_indicator") || el.id().equals("live_watching")
+                        || el.id().equals("viewer_count") || el.id().equals("live_chat")
                 );
                 case "Gaming" -> el.setEnabled(
-                    el.id().equals("live_indicator") || el.id().equals("viewer_count")
+                    el.id().equals("live_indicator") || el.id().equals("live_watching") || el.id().equals("viewer_count")
                 );
                 default -> el.setEnabled(!el.id().equals("connection_status"));
             }

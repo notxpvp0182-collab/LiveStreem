@@ -46,7 +46,7 @@ public final class ConfigManager {
         public boolean newestAtTop = false;
         public boolean chatShadow = false;
         public boolean textShadow = true;
-        public int chatDelayMs = 0;
+        public int chatDelayMs = 0; public String chatAnimStyle = "SLIDE_UP"; public float chatAnimSpeed = 1.0f;
     }
 
     public static final class ConfigPayload {
@@ -125,7 +125,7 @@ public final class ConfigManager {
                     chat.rgbMode = data.chat.rgbMode;
                     chat.newestAtTop = data.chat.newestAtTop;
                     chat.chatShadow = data.chat.chatShadow;
-                    chat.textShadow = data.chat.textShadow;
+                    chat.textShadow = data.chat.textShadow; if (data.chat.chatAnimStyle != null) chat.chatAnimStyle = data.chat.chatAnimStyle; chat.chatAnimSpeed = data.chat.chatAnimSpeed <= 0 ? 1.0f : data.chat.chatAnimSpeed;
                 }
             }
         } catch (Exception e) {
@@ -164,7 +164,7 @@ public final class ConfigManager {
                     current.chat.rgbMode = chat.rgbMode;
                     current.chat.newestAtTop = chat.newestAtTop;
                     current.chat.chatShadow = chat.chatShadow;
-                    current.chat.textShadow = chat.textShadow;
+                    current.chat.textShadow = chat.textShadow; current.chat.chatAnimStyle = chat.chatAnimStyle; current.chat.chatAnimSpeed = chat.chatAnimSpeed;
                 }
             }
             Files.createDirectories(configFile.getParent());

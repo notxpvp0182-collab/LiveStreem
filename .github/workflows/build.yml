@@ -40,6 +40,6 @@ jobs:
           files: |
             build/libs/LiveStream 1.21.jar
             build/libs/LiveStream-1.21.jar
-          overwrite: true
+          overwrite_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

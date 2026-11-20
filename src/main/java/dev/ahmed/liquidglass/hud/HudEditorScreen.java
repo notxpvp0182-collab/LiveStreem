@@ -46,7 +46,7 @@ public final class HudEditorScreen extends Screen {
             }
         }
 
-        if (inspectorElement != null) {
+        HudElement target = null; for (int i = HudManager.get().elements().size() - 1; i >= 0; i--) { HudElement el = HudManager.get().elements().get(i); if (mouseX >= el.x() && mouseX <= el.x() + el.width() && mouseY >= el.y() && mouseY <= el.y() + el.height()) { target = el; break; } } if (target == null) target = selectedElement != null ? selectedElement : inspectorElement; if (target != null) {
             float dw = 152.0f;
             float dh = 148.0f;
             float ix = Math.min(this.width - dw - 8, inspectorElement.x() + inspectorElement.width() + 8);
@@ -189,9 +189,9 @@ public final class HudEditorScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
-        if (inspectorElement != null) {
-            float next = inspectorElement.style().cornerRadius + (float) verticalAmount;
-            inspectorElement.style().cornerRadius = Math.max(0.0f, Math.min(18.0f, next));
+        HudElement target = null; for (int i = HudManager.get().elements().size() - 1; i >= 0; i--) { HudElement el = HudManager.get().elements().get(i); if (mouseX >= el.x() && mouseX <= el.x() + el.width() && mouseY >= el.y() && mouseY <= el.y() + el.height()) { target = el; break; } } if (target == null) target = selectedElement != null ? selectedElement : inspectorElement; if (target != null) {
+            float next = target.style().scale + (float) verticalAmount * 0.08f;
+            target.style().scale = Math.max(0.5f, Math.min(2.6f, next));
             return true;
         }
         return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
