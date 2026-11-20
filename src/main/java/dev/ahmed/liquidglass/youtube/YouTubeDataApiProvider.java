@@ -38,8 +38,7 @@ public final class YouTubeDataApiProvider implements StreamDataProvider {
 
     private volatile ChannelInfo cachedChannel;
     private volatile VideoInfo lastVideoInfo;
-    private volatile long runningTotalViews = -1L;
-    private volatile long lastWatchingCount = -1L;
+    private volatile String metaContinuation = null;
     private volatile int pollTick = 0;
 
     public YouTubeDataApiProvider() {}
@@ -47,7 +46,7 @@ public final class YouTubeDataApiProvider implements StreamDataProvider {
     @Override
     public VideoInfo fetchVideo(String videoId) throws ProviderException {
         int tick = pollTick++;
-        if (lastVideoInfo == null || tick % 25 == 0) {
+        if (lastVideoInfo == null || tick % 6 == 0) {
             return fetchFullWatchPage(videoId);
         }
         try {
@@ -58,17 +57,21 @@ public final class YouTubeDataApiProvider implements StreamDataProvider {
     }
 
     private VideoInfo fetchFastRealtimeTelemetry(String videoId) throws Exception {
-        String body = "{\"context\":{\"client\":{\"clientName\":\"WEB\",\"clientVersion\":\"2.20250214.01.00\",\"hl\":\"en\",\"gl\":\"US\"}},\"videoId\":\"" + videoId + "\"}";
+        String webBody = "{\"context\":{\"client\":{\"clientName\":\"WEB\",\"clientVersion\":\"2.20250214.01.00\",\"hl\":\"en\",\"gl\":\"US\"}},\"videoId\":\"" + videoId + "\"}";
+        String vrBody = "{\"context\":{\"client\":{\"clientName\":\"ANDROID_VR\",\"clientVersion\":\"1.60.19\",\"hl\":\"en\",\"gl\":\"US\"}},\"videoId\":\"" + videoId + "\"}";
+        String metaBody = (metaContinuation != null && !metaContinuation.isEmpty())
+            ? "{\"context\":{\"client\":{\"clientName\":\"WEB\",\"clientVersion\":\"2.20250214.01.00\",\"hl\":\"en\",\"gl\":\"US\"}},\"continuation\":\"" + metaContinuation + "\"}"
+            : webBody;
 
-        CompletableFuture<JsonObject> playerFut = CompletableFuture.supplyAsync(() -> postJson(PLAYER_API_URL, body));
-        CompletableFuture<JsonObject> nextFut = CompletableFuture.supplyAsync(() -> postJson(NEXT_API_URL, body));
-        CompletableFuture<JsonObject> metaFut = CompletableFuture.supplyAsync(() -> postJson(UPDATED_META_URL, body));
+        CompletableFuture<JsonObject> playerFut = CompletableFuture.supplyAsync(() -> postJson(PLAYER_API_URL, vrBody, videoId));
+        CompletableFuture<JsonObject> nextFut = CompletableFuture.supplyAsync(() -> postJson(NEXT_API_URL, webBody, videoId));
+        CompletableFuture<JsonObject> metaFut = CompletableFuture.supplyAsync(() -> postJson(UPDATED_META_URL, metaBody, videoId));
 
         JsonObject playerResp = playerFut.get();
         JsonObject nextResp = nextFut.get();
         JsonObject metaResp = metaFut.get();
 
-        if (playerResp == null && nextResp == null) {
+        if ((playerResp == null || obj(playerResp, "videoDetails") == null) && nextResp == null) {
             return fetchFullWatchPage(videoId);
         }
         return parseCombinedTelemetry(videoId, playerResp, nextResp, metaResp);
@@ -126,32 +129,35 @@ public final class YouTubeDataApiProvider implements StreamDataProvider {
 
         Long watching = null;
         Long likes = prev != null ? prev.likeCount() : null;
-        Long descViews = null;
+        Long descTotalViews = null;
 
         if (metaResp != null) {
-            JsonObject vcr = findObjectByKey(metaResp, "videoViewCountRenderer", 0);
-            if (vcr != null) {
-                watching = parseLongSafe(str(vcr, "originalViewCount"));
-                if (watching == null) watching = parseExactIntFromText(readText(obj(vcr, "viewCount")));
+            JsonObject timedCont = findObjectByKey(metaResp, "timedContinuationData", 0);
+            if (timedCont != null && str(timedCont, "continuation") != null) {
+                metaContinuation = str(timedCont, "continuation");
             }
+            watching = extractWatchingFromNode(metaResp);
             Long metaLikes = extractExactLikes(metaResp);
             if (metaLikes != null) likes = metaLikes;
         }
 
         if (initialData != null) {
-            JsonObject primaryInfo = findObjectByKey(initialData, "videoPrimaryInfoRenderer", 0);
-            if (primaryInfo != null) {
-                JsonObject vcr = obj(obj(primaryInfo, "viewCount"), "videoViewCountRenderer");
-                if (vcr != null && watching == null) {
-                    watching = parseLongSafe(str(vcr, "originalViewCount"));
-                    if (watching == null) watching = parseExactIntFromText(readText(obj(vcr, "viewCount")));
-                }
-                Long nextLikes = extractExactLikes(primaryInfo);
-                if (nextLikes != null) likes = nextLikes;
+            JsonObject updEndpoint = findObjectByKey(initialData, "updatedMetadataEndpoint", 0);
+            if (updEndpoint != null && str(updEndpoint, "continuation") != null) {
+                metaContinuation = str(updEndpoint, "continuation");
             }
+            if (watching == null) {
+                watching = extractWatchingFromNode(initialData);
+            }
+            Long nextLikes = extractExactLikes(initialData);
+            if (nextLikes != null) likes = nextLikes;
+
             JsonObject descHeader = findObjectByKey(initialData, "videoDescriptionHeaderRenderer", 0);
             if (descHeader != null) {
-                descViews = parseExactIntFromText(readText(obj(descHeader, "views")));
+                String vTxt = readText(obj(descHeader, "views"));
+                if (vTxt != null && !vTxt.toLowerCase(Locale.ROOT).contains("watching")) {
+                    descTotalViews = parseExactIntFromText(vTxt);
+                }
             }
             JsonObject ownerRenderer = findObjectByKey(initialData, "videoOwnerRenderer", 0);
             if (ownerRenderer != null) {
@@ -166,19 +172,16 @@ public final class YouTubeDataApiProvider implements StreamDataProvider {
             watching = detailsViews != null ? detailsViews : (prev != null ? prev.concurrentViewers() : null);
         }
 
-        long bestTotal = runningTotalViews;
-        if (microViews != null && microViews > bestTotal) bestTotal = microViews;
-        if (detailsViews != null && detailsViews > bestTotal) bestTotal = detailsViews;
-        if (descViews != null && descViews > bestTotal) bestTotal = descViews;
-        if (watching != null) {
-            if (lastWatchingCount >= 0 && watching > lastWatchingCount && bestTotal >= 0) {
-                bestTotal += (watching - lastWatchingCount);
-            }
-            if (watching > bestTotal) bestTotal = watching;
-            lastWatchingCount = watching;
+        Long totalViews = null;
+        if (microViews != null && microViews > 0) totalViews = microViews;
+        if (descTotalViews != null && (totalViews == null || descTotalViews > totalViews)) totalViews = descTotalViews;
+        if (detailsViews != null && (totalViews == null || detailsViews > totalViews)) totalViews = detailsViews;
+        if (prev != null && prev.totalViews() != null && (totalViews == null || prev.totalViews() > totalViews)) {
+            totalViews = prev.totalViews();
         }
-        if (bestTotal >= 0) runningTotalViews = bestTotal;
-        Long totalViews = runningTotalViews >= 0 ? runningTotalViews : watching;
+        if (watching != null && (totalViews == null || watching > totalViews)) {
+            totalViews = watching;
+        }
 
         if (this.cachedChannel == null) {
             this.cachedChannel = new ChannelInfo(channelId, author, "--", null, null);
@@ -193,6 +196,37 @@ public final class YouTubeDataApiProvider implements StreamDataProvider {
         return info;
     }
 
+    private static Long extractWatchingFromNode(JsonObject root) {
+        JsonObject vcEntity = findObjectByKey(root, "viewCountEntity", 0);
+        if (vcEntity != null) {
+            Long n = parseExactIntFromText(str(vcEntity, "viewCountNumber"));
+            if (n != null) return n;
+            JsonObject vcObj = obj(vcEntity, "viewCount");
+            if (vcObj != null) {
+                Long c = parseExactIntFromText(str(vcObj, "content"));
+                if (c != null) return c;
+            }
+        }
+        JsonObject vcr = findObjectByKey(root, "videoViewCountRenderer", 0);
+        if (vcr != null) {
+            Long orig = parseLongSafe(str(vcr, "originalViewCount"));
+            if (orig != null && orig > 0) return orig;
+            Long txt = parseExactIntFromText(readText(obj(vcr, "viewCount")));
+            if (txt != null) return txt;
+        }
+        JsonObject vcFactoid = findObjectByKey(root, "viewCountFactoidRenderer", 0);
+        if (vcFactoid != null) {
+            JsonObject factoid = obj(obj(vcFactoid, "factoid"), "factoidRenderer");
+            if (factoid != null) {
+                Long acc = parseExactIntFromText(str(factoid, "accessibilityText"));
+                if (acc != null) return acc;
+                Long val = parseCompactNumber(readText(obj(factoid, "value")));
+                if (val != null) return val;
+            }
+        }
+        return null;
+    }
+
     @Override
     public ChannelInfo fetchChannel(String channelId) {
         return cachedChannel != null ? cachedChannel : new ChannelInfo(channelId, "--", "--", null, null);
@@ -203,12 +237,16 @@ public final class YouTubeDataApiProvider implements StreamDataProvider {
         return ChatPopoutHelper.fetchLiveChat(this.http, liveChatContinuation, pageToken);
     }
 
-    private JsonObject postJson(String url, String jsonBody) {
+    private JsonObject postJson(String url, String jsonBody, String videoId) {
         try {
             HttpRequest req = HttpRequest.newBuilder(URI.create(url))
                 .timeout(Duration.ofSeconds(4))
                 .header("User-Agent", USER_AGENT)
                 .header("Content-Type", "application/json")
+                .header("Origin", "https://www.youtube.com")
+                .header("Referer", "https://www.youtube.com/watch?v=" + videoId)
+                .header("X-YouTube-Client-Name", "1")
+                .header("X-YouTube-Client-Version", "2.20250214.01.00")
                 .header("Accept-Language", "en-US,en;q=0.9")
                 .header("Cookie", "CONSENT=YES+cb")
                 .POST(HttpRequest.BodyPublishers.ofString(jsonBody, StandardCharsets.UTF_8))
@@ -244,6 +282,16 @@ public final class YouTubeDataApiProvider implements StreamDataProvider {
     }
 
     private static Long extractExactLikes(JsonObject root) {
+        JsonObject lcEntity = findObjectByKey(root, "likeCountEntity", 0);
+        if (lcEntity != null) {
+            Long n = parseExactIntFromText(str(lcEntity, "likeCountIfIndifferentNumber"));
+            if (n != null) return n;
+            JsonObject exp = obj(lcEntity, "expandedLikeCountIfIndifferent");
+            if (exp != null) {
+                Long c = parseCompactNumber(str(exp, "content"));
+                if (c != null) return c;
+            }
+        }
         JsonObject likeModel = findObjectByKey(root, "likeButtonViewModel", 0);
         if (likeModel != null) {
             JsonObject btnModel = findObjectByKey(likeModel, "buttonViewModel", 0);
@@ -299,7 +347,7 @@ public final class YouTubeDataApiProvider implements StreamDataProvider {
     }
 
     private static JsonObject findObjectByKey(JsonElement element, String targetKey, int depth) {
-        if (element == null || depth > 15 || !element.isJsonObject()) return null;
+        if (element == null || depth > 16 || !element.isJsonObject()) return null;
         JsonObject obj = element.getAsJsonObject();
         if (obj.has(targetKey) && obj.get(targetKey).isJsonObject()) {
             return obj.getAsJsonObject(targetKey);

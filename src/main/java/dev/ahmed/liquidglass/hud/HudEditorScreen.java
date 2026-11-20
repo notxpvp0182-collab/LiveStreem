@@ -46,7 +46,7 @@ public final class HudEditorScreen extends Screen {
             }
         }
 
-        HudElement target = null; for (int i = HudManager.get().elements().size() - 1; i >= 0; i--) { HudElement el = HudManager.get().elements().get(i); if (mouseX >= el.x() && mouseX <= el.x() + el.width() && mouseY >= el.y() && mouseY <= el.y() + el.height()) { target = el; break; } } if (target == null) target = selectedElement != null ? selectedElement : inspectorElement; if (target != null) {
+        if (inspectorElement != null) {
             float dw = 152.0f;
             float dh = 148.0f;
             float ix = Math.min(this.width - dw - 8, inspectorElement.x() + inspectorElement.width() + 8);
