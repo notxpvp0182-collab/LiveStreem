@@ -5,16 +5,16 @@ import dev.ahmed.liquidglass.ui.font.SmallCapsRenderer;
 import dev.ahmed.liquidglass.ui.font.WorldLanguageShaper;
 import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.gui.DrawContext;
-import org.joml.Matrix3x2fStack;
+import net.minecraft.client.util.math.MatrixStack;
 
 public final class EmojiRenderer {
     private EmojiRenderer() {}
 
     public static float drawYouTubeBadge(DrawContext ctx, float x, float y, int alpha) {
-        Matrix3x2fStack m = ctx.getMatrices();
-        m.pushMatrix();
-        m.translate(x, y);
-        m.scale(0.5f, 0.5f);
+        MatrixStack m = ctx.getMatrices();
+        m.push();
+        m.translate(x, y, 0.0f);
+        m.scale(0.5f, 0.5f, 1.0f);
 
         int red = UIRenderer.withAlpha(0xFFFF0033, alpha);
         int white = UIRenderer.withAlpha(0xFFFFFFFF, alpha);
@@ -28,16 +28,16 @@ public final class EmojiRenderer {
         ctx.fill(12, 6, 14, 10, white);
         ctx.fill(14, 7, 15, 9, white);
 
-        m.popMatrix();
+        m.pop();
         return 13.5f;
     }
 
     public static float drawRoleBadge(DrawContext ctx, float x, float y, boolean owner, boolean mod, boolean member, int alpha) {
         if (!owner && !mod && !member) return 0.0f;
-        Matrix3x2fStack m = ctx.getMatrices();
-        m.pushMatrix();
-        m.translate(x, y);
-        m.scale(0.5f, 0.5f);
+        MatrixStack m = ctx.getMatrices();
+        m.push();
+        m.translate(x, y, 0.0f);
+        m.scale(0.5f, 0.5f, 1.0f);
 
         int badgeCol = owner ? 0xFFFFD866 : (mod ? 0xFF5E97F6 : 0xFF2BA640);
         int col = UIRenderer.withAlpha(badgeCol, alpha);
@@ -47,7 +47,7 @@ public final class EmojiRenderer {
         ctx.fill(1, 2, 15, 14, col);
         ctx.fill(6, 4, 10, 12, inner);
 
-        m.popMatrix();
+        m.pop();
         return 10.0f;
     }
 
@@ -192,10 +192,10 @@ public final class EmojiRenderer {
     }
 
     private static void drawFlagEmoji(DrawContext ctx, int firstCp, int secondCp, float x, float y, int alpha) {
-        Matrix3x2fStack m = ctx.getMatrices();
-        m.pushMatrix();
-        m.translate(x, y + 0.5f);
-        m.scale(0.5f, 0.5f);
+        MatrixStack m = ctx.getMatrices();
+        m.push();
+        m.translate(x, y + 0.5f, 0.0f);
+        m.scale(0.5f, 0.5f, 1.0f);
 
         char c1 = (char) ('A' + (firstCp - 0x1F1E6));
         char c2 = secondCp > 0 ? (char) ('A' + (secondCp - 0x1F1E6)) : ' ';
@@ -215,7 +215,7 @@ public final class EmojiRenderer {
             ctx.fill(0, 7, 18, 13, UIRenderer.withAlpha(0xFFFACC15, alpha));
             ctx.fill(5, 4, 13, 10, UIRenderer.withAlpha(0xFF3B82F6, alpha));
         }
-        m.popMatrix();
+        m.pop();
     }
 
     public static boolean isColorEmoji(int cp) {
@@ -225,10 +225,10 @@ public final class EmojiRenderer {
     }
 
     private static void drawColorEmojiIcon(DrawContext ctx, int cp, float fx, float fy, int alpha) {
-        Matrix3x2fStack m = ctx.getMatrices();
-        m.pushMatrix();
-        m.translate(fx, fy);
-        m.scale(0.5f, 0.5f);
+        MatrixStack m = ctx.getMatrices();
+        m.push();
+        m.translate(fx, fy, 0.0f);
+        m.scale(0.5f, 0.5f, 1.0f);
 
         if (cp == 0x2764 || cp == 0x2665 || (cp >= 0x1F493 && cp <= 0x1F49F) || cp == 0x1F9E1 || cp == 0x1F90D || cp == 0x1F5A4) {
             int hc = switch (cp) {
@@ -249,7 +249,7 @@ public final class EmojiRenderer {
             ctx.fill(6, 14, 12, 16, c);
             ctx.fill(8, 16, 10, 17, c);
             ctx.fill(3, 3, 5, 5, hi);
-            m.popMatrix();
+            m.pop();
             return;
         }
 
@@ -262,7 +262,7 @@ public final class EmojiRenderer {
             ctx.fill(4, 6, 8, 11, petal);
             ctx.fill(10, 8, 12, 17, stem);
             ctx.fill(6, 12, 10, 14, stem);
-            m.popMatrix();
+            m.pop();
             return;
         }
 
@@ -275,7 +275,7 @@ public final class EmojiRenderer {
             ctx.fill(2, 8, 16, 16, outer);
             ctx.fill(4, 6, 14, 15, mid);
             ctx.fill(6, 10, 12, 16, core);
-            m.popMatrix();
+            m.pop();
             return;
         }
 
@@ -289,7 +289,7 @@ public final class EmojiRenderer {
             ctx.fill(4, 6, 7, 9, eye);
             ctx.fill(11, 6, 14, 9, eye);
             ctx.fill(5, 12, 13, 14, eye);
-            m.popMatrix();
+            m.pop();
             return;
         }
 
@@ -299,7 +299,7 @@ public final class EmojiRenderer {
             drawSmoothCircleFace(ctx, green, UIRenderer.withAlpha(0xFF86EFAC, alpha));
             ctx.fill(3, 6, 7, 10, eye);
             ctx.fill(11, 6, 15, 10, eye);
-            m.popMatrix();
+            m.pop();
             return;
         }
 
@@ -337,7 +337,7 @@ public final class EmojiRenderer {
             ctx.fill(12, 6, 14, 9, eye);
             ctx.fill(5, 12, 13, 14, eye);
         }
-        m.popMatrix();
+        m.pop();
     }
 
     private static void drawSmoothCircleFace(DrawContext ctx, int baseCol, int hiCol) {

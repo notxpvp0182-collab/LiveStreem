@@ -15,12 +15,10 @@ import dev.ahmed.liquidglass.ui.render.UIRenderer;
 import dev.ahmed.liquidglass.ui.theme.GlassQuality;
 import dev.ahmed.liquidglass.ui.theme.ThemeManager;
 import dev.ahmed.liquidglass.ui.theme.ThemeTokens;
-import net.minecraft.client.gui.Click;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.input.KeyInput;
 import net.minecraft.text.Text;
-import org.joml.Matrix3x2fStack;
+import net.minecraft.client.util.math.MatrixStack;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
@@ -194,11 +192,11 @@ public final class LiquidClickGuiScreen extends Screen {
         float dmx = toDesignX(mouseX);
         float dmy = toDesignY(mouseY);
 
-        Matrix3x2fStack matrices = ctx.getMatrices();
-        matrices.pushMatrix();
-        matrices.translate(this.width * 0.5f, this.height * 0.5f);
-        matrices.scale(animScale, animScale);
-        matrices.translate(-this.width * 0.5f, -this.height * 0.5f);
+        MatrixStack matrices = ctx.getMatrices();
+        matrices.push();
+        matrices.translate(this.width * 0.5f, this.height * 0.5f, 0.0f);
+        matrices.scale(animScale, animScale, 1.0f);
+        matrices.translate(-this.width * 0.5f, -this.height * 0.5f, 0.0f);
 
         float centerX = this.width * 0.5f;
         float centerY = this.height * 0.5f;
@@ -346,7 +344,7 @@ public final class LiquidClickGuiScreen extends Screen {
             ctx.disableScissor();
         }
 
-        matrices.popMatrix();
+        matrices.pop();
     }
 
     private void drawDockButton(DrawContext ctx, float x, float y, float w, float h, String label, float dmx, float dmy) {
@@ -376,10 +374,10 @@ public final class LiquidClickGuiScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(Click click, boolean doubled) {
-        double mx = toDesignX(click.x());
-        double my = toDesignY(click.y());
-        int button = click.button();
+    public boolean mouseClicked(double clickX, double clickY, int clickBtn) {
+        double mx = toDesignX(clickX);
+        double my = toDesignY(clickY);
+        int button = clickBtn;
 
         float centerX = this.width * 0.5f;
         float centerY = this.height * 0.5f;
@@ -473,13 +471,13 @@ public final class LiquidClickGuiScreen extends Screen {
                 }
             }
         }
-        return super.mouseClicked(click, doubled);
+        return super.mouseClicked(clickX, clickY, clickBtn);
     }
 
     @Override
-    public boolean mouseDragged(Click click, double offsetX, double offsetY) {
-        double dmx = toDesignX(click.x());
-        double dmy = toDesignY(click.y());
+    public boolean mouseDragged(double clickX, double clickY, int clickBtn, double offsetX, double offsetY) {
+        double dmx = toDesignX(clickX);
+        double dmy = toDesignY(clickY);
         if (draggingScrollbar) {
             updateScrollFromMouse(dmy);
             return true;
@@ -495,16 +493,16 @@ public final class LiquidClickGuiScreen extends Screen {
                 }
             }
         }
-        return super.mouseDragged(click, offsetX, offsetY);
+        return super.mouseDragged(clickX, clickY, clickBtn, offsetX, offsetY);
     }
 
     @Override
-    public boolean mouseReleased(Click click) {
+    public boolean mouseReleased(double clickX, double clickY, int clickBtn) {
         draggingScrollbar = false;
         for (GlassSlider slider : activeSliders) {
             slider.mouseReleased();
         }
-        return super.mouseReleased(click);
+        return super.mouseReleased(clickX, clickY, clickBtn);
     }
 
     @Override
@@ -518,8 +516,8 @@ public final class LiquidClickGuiScreen extends Screen {
     }
 
     @Override
-    public boolean keyPressed(KeyInput input) {
-        if (input.key() == GLFW.GLFW_KEY_ESCAPE) {
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
             if (selectedCategory != null) {
                 selectedCategory = null;
                 return true;
@@ -528,7 +526,7 @@ public final class LiquidClickGuiScreen extends Screen {
             this.openAnim.animateTo(0.0f);
             return true;
         }
-        return super.keyPressed(input);
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override

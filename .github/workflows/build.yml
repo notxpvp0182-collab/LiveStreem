@@ -1,4 +1,4 @@
-name: Build & Release LiveStream
+name: Build and Release
 
 on:
   push:
@@ -11,7 +11,6 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -22,40 +21,25 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      - name: Download Official Bengali TrueType Font (Hind Siliguri)
-        run: |
-          mkdir -p src/main/resources/assets/liquidglass/font
-          curl -fL "https://raw.githubusercontent.com/google/fonts/main/ofl/hindsiliguri/HindSiliguri-SemiBold.ttf" \
-            -o src/main/resources/assets/liquidglass/font/bengali.ttf
-
-      - name: Setup Gradle 9.2.1
+      - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '9.2.1'
+          gradle-version: '8.14'
 
-      - name: Build LiveStream Mod JAR
-        run: |
-          VERSION_TAG="v${{ github.run_number }}-1.21.11"
-          gradle build -Prelease_version="${VERSION_TAG}" --no-daemon
+      - name: Build Mod
+        run: gradle build --no-daemon
 
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: LiveStream-v${{ github.run_number }}-1.21.11
-          path: |
-            build/libs/LiveStream-v${{ github.run_number }}-1.21.11.jar
+      - name: Prepare Jar File
+        run: cp build/libs/LiveStream-1.21.jar "build/libs/LiveStream 1.21.jar"
 
-      - name: Create Automatic GitHub Release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ github.run_number }}-1.21.11
-          name: LiveStream v${{ github.run_number }} (1.21.11)
-          body: |
-            Automated build of **LiveStream** for Minecraft **1.21.11** (Fabric).
-            - **File:** `LiveStream-v${{ github.run_number }}-1.21.11.jar`
+          tag_name: v1.21
+          name: "LiveStream 1.21"
           files: |
-            build/libs/LiveStream-v${{ github.run_number }}-1.21.11.jar
-          draft: false
-          prerelease: false
+            build/libs/LiveStream 1.21.jar
+            build/libs/LiveStream-1.21.jar
+          overwrite: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,7 +1,7 @@
 package dev.ahmed.liquidglass.ui.render;
 
 import net.minecraft.client.gui.DrawContext;
-import org.joml.Matrix3x2fStack;
+import net.minecraft.client.util.math.MatrixStack;
 
 public final class IconRenderer {
     public enum Icon {
@@ -19,10 +19,10 @@ public final class IconRenderer {
 
         switch (icon) {
             case BACK -> {
-                Matrix3x2fStack m = ctx.getMatrices();
-                m.pushMatrix();
-                m.translate(x, y);
-                m.scale(0.5f, 0.5f);
+                MatrixStack m = ctx.getMatrices();
+                m.push();
+                m.translate(x, y, 0.0f);
+                m.scale(0.5f, 0.5f, 1.0f);
                 int s = Math.round(size * 2.0f);
                 int cy = s / 2;
                 ctx.fill(5, cy - 1, s - 4, cy + 1, color);
@@ -30,7 +30,7 @@ public final class IconRenderer {
                     ctx.fill(4 + i, cy - i, 6 + i, cy - i + 2, color);
                     ctx.fill(4 + i, cy + i - 1, 6 + i, cy + i + 1, color);
                 }
-                m.popMatrix();
+                m.pop();
             }
             case LIVE -> {
                 // Premium YouTube Broadcast Play Emblem
@@ -41,17 +41,17 @@ public final class IconRenderer {
                 UIRenderer.drawRoundedBorder(ctx, x, oy, w, h, 5.5f, 1.0f, color);
 
                 // Smooth Play Triangle in center
-                Matrix3x2fStack m = ctx.getMatrices();
-                m.pushMatrix();
-                m.translate(x + w * 0.38f, oy + h * 0.26f);
-                m.scale(0.5f, 0.5f);
+                MatrixStack m = ctx.getMatrices();
+                m.push();
+                m.translate(x + w * 0.38f, oy + h * 0.26f, 0.0f);
+                m.scale(0.5f, 0.5f, 1.0f);
                 int th = Math.round(h * 0.96f);
                 for (int row = 0; row < th; row++) {
                     int half = th / 2;
                     int dist = half - Math.abs(half - row);
                     ctx.fill(0, row, Math.max(1, dist + 1), row + 1, color);
                 }
-                m.popMatrix();
+                m.pop();
             }
             case DISPLAY, STREAM -> {
                 // Premium HUD Layout Monitor Icon

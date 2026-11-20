@@ -10,13 +10,10 @@ import dev.ahmed.liquidglass.ui.render.UIRenderer;
 import dev.ahmed.liquidglass.ui.theme.GlassQuality;
 import dev.ahmed.liquidglass.ui.theme.ThemeManager;
 import dev.ahmed.liquidglass.ui.theme.ThemeTokens;
-import net.minecraft.client.gui.Click;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.input.CharInput;
-import net.minecraft.client.input.KeyInput;
 import net.minecraft.text.Text;
-import org.joml.Matrix3x2fStack;
+import net.minecraft.client.util.math.MatrixStack;
 import org.lwjgl.glfw.GLFW;
 
 public final class WorkspaceModalScreen extends Screen {
@@ -59,11 +56,11 @@ public final class WorkspaceModalScreen extends Screen {
         ctx.fill(0, 0, this.width, this.height, UIRenderer.withAlpha(t.bgOverlay(), (int) (185 * progress)));
 
         float scale = 0.93f + 0.07f * progress;
-        Matrix3x2fStack matrices = ctx.getMatrices();
-        matrices.pushMatrix();
+        MatrixStack matrices = ctx.getMatrices();
+        matrices.push();
         matrices.translate(this.width * 0.5f, this.height * 0.5f + (1.0f - progress) * 10.0f);
-        matrices.scale(scale, scale);
-        matrices.translate(-this.width * 0.5f, -this.height * 0.5f);
+        matrices.scale(scale, scale, 1.0f);
+        matrices.translate(-this.width * 0.5f, -this.height * 0.5f, 0.0f);
 
         float modalW = Math.min(520.0f, this.width - 40.0f);
         float modalH = Math.min(310.0f, this.height - 40.0f);
@@ -145,7 +142,7 @@ public final class WorkspaceModalScreen extends Screen {
         drawTelemetryCard(ctx, mainX + 20 + cardW, mainY + 170, cardW, 42,
             "Likes", snap.likeCount() != null ? HudManager.formatCompactNumber(snap.likeCount()) : "--");
 
-        matrices.popMatrix();
+        matrices.pop();
     }
 
     private void drawButton(DrawContext ctx, float x, float y, float w, float h, String label, int mouseX, int mouseY) {
@@ -166,10 +163,10 @@ public final class WorkspaceModalScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(Click click, boolean doubled) {
-        double cx = click.x();
-        double cy = click.y();
-        int btn = click.button();
+    public boolean mouseClicked(double clickX, double clickY, int clickBtn) {
+        double cx = clickX;
+        double cy = clickY;
+        int btn = clickBtn;
 
         float modalW = Math.min(520.0f, this.width - 40.0f);
         float modalH = Math.min(310.0f, this.height - 40.0f);
@@ -231,35 +228,35 @@ public final class WorkspaceModalScreen extends Screen {
                 return true;
             }
         }
-        return super.mouseClicked(click, doubled);
+        return super.mouseClicked(clickX, clickY, clickBtn);
     }
 
     @Override
-    public boolean mouseDragged(Click click, double ox, double oy) {
-        if (streamUrlField.mouseDragged(click.x())) return true;
-        return super.mouseDragged(click, ox, oy);
+    public boolean mouseDragged(double clickX, double clickY, int clickBtn, double ox, double oy) {
+        if (streamUrlField.mouseDragged(clickX)) return true;
+        return super.mouseDragged(clickX, clickY, clickBtn, ox, oy);
     }
 
     @Override
-    public boolean mouseReleased(Click click) {
+    public boolean mouseReleased(double clickX, double clickY, int clickBtn) {
         streamUrlField.mouseReleased();
-        return super.mouseReleased(click);
+        return super.mouseReleased(clickX, clickY, clickBtn);
     }
 
     @Override
-    public boolean keyPressed(KeyInput input) {
-        if (streamUrlField.keyPressed(input)) return true;
-        if (input.key() == GLFW.GLFW_KEY_ESCAPE) {
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (streamUrlField.keyPressed(keyCode, scanCode, modifiers)) return true;
+        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
             closeWithAnimation();
             return true;
         }
-        return super.keyPressed(input);
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override
-    public boolean charTyped(CharInput input) {
-        if (streamUrlField.charTyped(input)) return true;
-        return super.charTyped(input);
+    public boolean charTyped(char chr, int modifiers) {
+        if (streamUrlField.charTyped(chr, modifiers)) return true;
+        return super.charTyped(chr, modifiers);
     }
 
     @Override
