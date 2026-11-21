@@ -94,8 +94,6 @@ jobs:
           git commit -m "LiveStream Official Release Hub (README Only)"
           git tag -f all-versions
           git push origin refs/tags/all-versions --force
-          git branch -M main
-          git push origin main --force
 
       - name: Download All Built Jars
         uses: actions/download-artifact@v4
