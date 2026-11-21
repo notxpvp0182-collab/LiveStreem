@@ -4,7 +4,10 @@ import dev.ahmed.liquidglass.config.ConfigManager;
 import dev.ahmed.liquidglass.ui.render.UIRenderer;
 import dev.ahmed.liquidglass.ui.theme.ThemeManager;
 import dev.ahmed.liquidglass.ui.theme.ThemeTokens;
+import net.minecraft.client.gui.Click;
 import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.input.KeyInput;
+import net.minecraft.client.input.CharInput;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
@@ -101,10 +104,10 @@ public final class HudEditorScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(double clickX, double clickY, int clickBtn) {
-        double mx = clickX;
-        double my = clickY;
-        int btn = clickBtn;
+    public boolean mouseClicked(Click click, boolean doubled) {
+        double mx = click.x();
+        double my = click.y();
+        int btn = click.button();
 
         if (inspectorElement != null && btn == 0) {
             float dw = 152.0f;
@@ -151,7 +154,7 @@ public final class HudEditorScreen extends Screen {
             }
         }
         inspectorElement = null;
-        return super.mouseClicked(clickX, clickY, clickBtn);
+        return super.mouseClicked(click, doubled);
     }
 
     private static boolean hit(double mx, double my, float x, float y, float w, float h) {
@@ -159,15 +162,15 @@ public final class HudEditorScreen extends Screen {
     }
 
     @Override
-    public boolean mouseDragged(double clickX, double clickY, int clickBtn, double offsetX, double offsetY) {
+    public boolean mouseDragged(Click click, double offsetX, double offsetY) {
         if (selectedElement != null && !selectedElement.isLocked()) {
             if (resizing) {
-                selectedElement.resize((float) clickX - selectedElement.x(), (float) clickY - selectedElement.y());
+                selectedElement.resize((float) click.x() - selectedElement.x(), (float) click.y() - selectedElement.y());
                 return true;
             }
             if (dragging) {
-                float nx = (float) clickX - dragOffsetX;
-                float ny = (float) clickY - dragOffsetY;
+                float nx = (float) click.x() - dragOffsetX;
+                float ny = (float) click.y() - dragOffsetY;
                 float cx = (this.width - selectedElement.width()) * 0.5f;
                 if (Math.abs(nx - cx) < 5.0f) nx = cx;
                 selectedElement.setPosition(
@@ -177,14 +180,14 @@ public final class HudEditorScreen extends Screen {
                 return true;
             }
         }
-        return super.mouseDragged(clickX, clickY, clickBtn, offsetX, offsetY);
+        return super.mouseDragged(click, offsetX, offsetY);
     }
 
     @Override
-    public boolean mouseReleased(double clickX, double clickY, int clickBtn) {
+    public boolean mouseReleased(Click click) {
         dragging = false;
         resizing = false;
-        return super.mouseReleased(clickX, clickY, clickBtn);
+        return super.mouseReleased(click);
     }
 
     @Override
@@ -198,12 +201,12 @@ public final class HudEditorScreen extends Screen {
     }
 
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+    public boolean keyPressed(KeyInput input) {
+        if (input.key() == GLFW.GLFW_KEY_ESCAPE) {
             if (this.client != null) this.client.setScreen(parent);
             return true;
         }
-        return super.keyPressed(keyCode, scanCode, modifiers);
+        return super.keyPressed(input);
     }
 
     @Override

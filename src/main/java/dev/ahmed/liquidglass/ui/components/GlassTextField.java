@@ -6,7 +6,10 @@ import dev.ahmed.liquidglass.ui.theme.ThemeManager;
 import dev.ahmed.liquidglass.ui.theme.ThemeTokens;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.font.TextRenderer;
+import net.minecraft.client.gui.Click;
 import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.input.KeyInput;
+import net.minecraft.client.input.CharInput;
 import org.lwjgl.glfw.GLFW;
 
 public final class GlassTextField {
@@ -172,10 +175,10 @@ public final class GlassTextField {
         return shown.length();
     }
 
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+    public boolean keyPressed(KeyInput input) {
         if (!focused) return false;
-        int key = keyCode;
-        int mods = modifiers;
+        int key = input.key();
+        int mods = input.modifiers();
         boolean ctrl = (mods & (GLFW.GLFW_MOD_CONTROL | GLFW.GLFW_MOD_SUPER)) != 0;
         boolean shift = (mods & GLFW.GLFW_MOD_SHIFT) != 0;
 
@@ -265,10 +268,10 @@ public final class GlassTextField {
         return false;
     }
 
-    public boolean charTyped(char chr, int modifiers) {
+    public boolean charTyped(CharInput input) {
         if (!focused) return false;
-        String typed = Character.toString(chr);
-        if (typed != null && !typed.isEmpty() && chr >= 32 && chr != 127) {
+        String typed = input.asString();
+        if (typed != null && !typed.isEmpty() && input.codepoint() >= 32) {
             insert(typed);
             return true;
         }

@@ -1,4 +1,4 @@
-name: Build Batch 2 (1.21.6 - 1.21.8)
+name: Build Batch 3 (1.21.9 - 1.21.11)
 
 on:
   push:
@@ -15,18 +15,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - mc: "1.21.6"
-            yarn: "1.21.6+build.1"
-            loader: "0.16.14"
-            fabric: "0.128.2+1.21.6"
-          - mc: "1.21.7"
-            yarn: "1.21.7+build.8"
-            loader: "0.16.14"
-            fabric: "0.129.0+1.21.7"
-          - mc: "1.21.8"
-            yarn: "1.21.8+build.1"
-            loader: "0.16.14"
-            fabric: "0.129.0+1.21.8"
+          - mc: "1.21.9"
+            yarn: "1.21.9+build.1"
+            loader: "0.18.1"
+            fabric: "0.134.0+1.21.9"
+          - mc: "1.21.10"
+            yarn: "1.21.10+build.2"
+            loader: "0.18.1"
+            fabric: "0.138.0+1.21.10"
+          - mc: "1.21.11"
+            yarn: "1.21.11+build.6"
+            loader: "0.18.1"
+            fabric: "0.141.1+1.21.11"
 
     steps:
       - name: Checkout Repository
@@ -38,10 +38,10 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      - name: Setup Gradle 8.14
+      - name: Setup Gradle 9.2.0
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.14'
+          gradle-version: '9.2.0'
 
       - name: Configure Version ${{ matrix.mc }} via sed
         run: |
@@ -65,6 +65,27 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Remove Source Code from Release Tags
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # পুরনো v1.21 রিলিজ ও ট্যাগ ডিলিট করা (যেটাতে সোর্স কোড ছিল)
+          gh release delete v1.21 --yes --cleanup-tag || true
+          # শুধুমাত্র README.md দিয়ে একটি সোর্স-কোডহীন কমিট বানিয়ে রিলিজ ট্যাগে পুশ করা
+          cp README.md /tmp/README.md
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan readme-only-tag
+          git rm -rf .
+          cp /tmp/README.md README.md
+          git add README.md
+          git commit -m "Release README only (No Source Code)"
+          git tag -f all-versions
+          git push origin refs/tags/all-versions --force
+
       - name: Download All Built Jars
         uses: actions/download-artifact@v4
         with:

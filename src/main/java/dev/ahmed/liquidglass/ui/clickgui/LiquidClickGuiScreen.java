@@ -15,7 +15,10 @@ import dev.ahmed.liquidglass.ui.render.UIRenderer;
 import dev.ahmed.liquidglass.ui.theme.GlassQuality;
 import dev.ahmed.liquidglass.ui.theme.ThemeManager;
 import dev.ahmed.liquidglass.ui.theme.ThemeTokens;
+import net.minecraft.client.gui.Click;
 import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.input.KeyInput;
+import net.minecraft.client.input.CharInput;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.text.Text;
 import org.joml.Matrix3x2fStack;
@@ -374,10 +377,10 @@ public final class LiquidClickGuiScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(double clickX, double clickY, int clickBtn) {
-        double mx = toDesignX(clickX);
-        double my = toDesignY(clickY);
-        int button = clickBtn;
+    public boolean mouseClicked(Click click, boolean doubled) {
+        double mx = toDesignX(click.x());
+        double my = toDesignY(click.y());
+        int button = click.button();
 
         float centerX = this.width * 0.5f;
         float centerY = this.height * 0.5f;
@@ -471,13 +474,13 @@ public final class LiquidClickGuiScreen extends Screen {
                 }
             }
         }
-        return super.mouseClicked(clickX, clickY, clickBtn);
+        return super.mouseClicked(click, doubled);
     }
 
     @Override
-    public boolean mouseDragged(double clickX, double clickY, int clickBtn, double offsetX, double offsetY) {
-        double dmx = toDesignX(clickX);
-        double dmy = toDesignY(clickY);
+    public boolean mouseDragged(Click click, double offsetX, double offsetY) {
+        double dmx = toDesignX(click.x());
+        double dmy = toDesignY(click.y());
         if (draggingScrollbar) {
             updateScrollFromMouse(dmy);
             return true;
@@ -493,16 +496,16 @@ public final class LiquidClickGuiScreen extends Screen {
                 }
             }
         }
-        return super.mouseDragged(clickX, clickY, clickBtn, offsetX, offsetY);
+        return super.mouseDragged(click, offsetX, offsetY);
     }
 
     @Override
-    public boolean mouseReleased(double clickX, double clickY, int clickBtn) {
+    public boolean mouseReleased(Click click) {
         draggingScrollbar = false;
         for (GlassSlider slider : activeSliders) {
             slider.mouseReleased();
         }
-        return super.mouseReleased(clickX, clickY, clickBtn);
+        return super.mouseReleased(click);
     }
 
     @Override
@@ -516,8 +519,8 @@ public final class LiquidClickGuiScreen extends Screen {
     }
 
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+    public boolean keyPressed(KeyInput input) {
+        if (input.key() == GLFW.GLFW_KEY_ESCAPE) {
             if (selectedCategory != null) {
                 selectedCategory = null;
                 return true;
@@ -526,7 +529,7 @@ public final class LiquidClickGuiScreen extends Screen {
             this.openAnim.animateTo(0.0f);
             return true;
         }
-        return super.keyPressed(keyCode, scanCode, modifiers);
+        return super.keyPressed(input);
     }
 
     @Override

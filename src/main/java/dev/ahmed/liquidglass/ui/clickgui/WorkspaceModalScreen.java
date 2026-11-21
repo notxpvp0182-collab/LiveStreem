@@ -10,7 +10,10 @@ import dev.ahmed.liquidglass.ui.render.UIRenderer;
 import dev.ahmed.liquidglass.ui.theme.GlassQuality;
 import dev.ahmed.liquidglass.ui.theme.ThemeManager;
 import dev.ahmed.liquidglass.ui.theme.ThemeTokens;
+import net.minecraft.client.gui.Click;
 import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.input.KeyInput;
+import net.minecraft.client.input.CharInput;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.text.Text;
 import org.joml.Matrix3x2fStack;
@@ -163,10 +166,10 @@ public final class WorkspaceModalScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(double clickX, double clickY, int clickBtn) {
-        double cx = clickX;
-        double cy = clickY;
-        int btn = clickBtn;
+    public boolean mouseClicked(Click click, boolean doubled) {
+        double cx = click.x();
+        double cy = click.y();
+        int btn = click.button();
 
         float modalW = Math.min(520.0f, this.width - 40.0f);
         float modalH = Math.min(310.0f, this.height - 40.0f);
@@ -228,35 +231,35 @@ public final class WorkspaceModalScreen extends Screen {
                 return true;
             }
         }
-        return super.mouseClicked(clickX, clickY, clickBtn);
+        return super.mouseClicked(click, doubled);
     }
 
     @Override
-    public boolean mouseDragged(double clickX, double clickY, int clickBtn, double ox, double oy) {
-        if (streamUrlField.mouseDragged(clickX)) return true;
-        return super.mouseDragged(clickX, clickY, clickBtn, ox, oy);
+    public boolean mouseDragged(Click click, double ox, double oy) {
+        if (streamUrlField.mouseDragged(click.x())) return true;
+        return super.mouseDragged(click, ox, oy);
     }
 
     @Override
-    public boolean mouseReleased(double clickX, double clickY, int clickBtn) {
+    public boolean mouseReleased(Click click) {
         streamUrlField.mouseReleased();
-        return super.mouseReleased(clickX, clickY, clickBtn);
+        return super.mouseReleased(click);
     }
 
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (streamUrlField.keyPressed(keyCode, scanCode, modifiers)) return true;
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+    public boolean keyPressed(KeyInput input) {
+        if (streamUrlField.keyPressed(input)) return true;
+        if (input.key() == GLFW.GLFW_KEY_ESCAPE) {
             closeWithAnimation();
             return true;
         }
-        return super.keyPressed(keyCode, scanCode, modifiers);
+        return super.keyPressed(input);
     }
 
     @Override
-    public boolean charTyped(char chr, int modifiers) {
-        if (streamUrlField.charTyped(chr, modifiers)) return true;
-        return super.charTyped(chr, modifiers);
+    public boolean charTyped(CharInput input) {
+        if (streamUrlField.charTyped(input)) return true;
+        return super.charTyped(input);
     }
 
     @Override
