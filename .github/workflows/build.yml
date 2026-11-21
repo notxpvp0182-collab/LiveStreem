@@ -1,4 +1,4 @@
-name: Build and Release
+name: Build Batch 1 (1.21 - 1.21.5)
 
 on:
   push:
@@ -11,6 +11,35 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - mc: "1.21"
+            yarn: "1.21+build.9"
+            loader: "0.16.14"
+            fabric: "0.102.0+1.21"
+          - mc: "1.21.1"
+            yarn: "1.21.1+build.3"
+            loader: "0.16.14"
+            fabric: "0.116.0+1.21.1"
+          - mc: "1.21.2"
+            yarn: "1.21.2+build.1"
+            loader: "0.16.14"
+            fabric: "0.106.1+1.21.2"
+          - mc: "1.21.3"
+            yarn: "1.21.3+build.2"
+            loader: "0.16.14"
+            fabric: "0.114.0+1.21.3"
+          - mc: "1.21.4"
+            yarn: "1.21.4+build.8"
+            loader: "0.16.14"
+            fabric: "0.119.2+1.21.4"
+          - mc: "1.21.5"
+            yarn: "1.21.5+build.1"
+            loader: "0.16.14"
+            fabric: "0.123.2+1.21.5"
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -21,25 +50,45 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      - name: Setup Gradle
+      - name: Setup Gradle 8.14
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.14'
 
-      - name: Build Mod
+      - name: Configure Version ${{ matrix.mc }} via sed
+        run: |
+          sed -i "s/^minecraft_version=.*/minecraft_version=${{ matrix.mc }}/" gradle.properties
+          sed -i "s/^yarn_mappings=.*/yarn_mappings=${{ matrix.yarn }}/" gradle.properties
+          sed -i "s/^loader_version=.*/loader_version=${{ matrix.loader }}/" gradle.properties
+          sed -i "s/^fabric_version=.*/fabric_version=${{ matrix.fabric }}/" gradle.properties
+          sed -i "s/^mod_version=.*/mod_version=${{ matrix.mc }}/" gradle.properties
+          sed -i 's/"minecraft": "[^"]*"/"minecraft": "${{ matrix.mc }}"/' src/main/resources/fabric.mod.json
+
+      - name: Build Mod for ${{ matrix.mc }}
         run: gradle build --no-daemon
 
-      - name: Prepare Jar File
-        run: cp build/libs/LiveStream-1.21.jar "build/libs/LiveStream 1.21.jar"
+      - name: Upload Artifact for ${{ matrix.mc }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: jar-${{ matrix.mc }}
+          path: build/libs/LiveStream-${{ matrix.mc }}.jar
 
-      - name: Create GitHub Release
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download All Built Jars
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish All Jars to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.21
-          name: "LiveStream 1.21"
-          files: |
-            build/libs/LiveStream 1.21.jar
-            build/libs/LiveStream-1.21.jar
+          tag_name: all-versions
+          name: "LiveStream Mod (All Versions 1.21 - 26.3)"
+          files: dist/LiveStream-*.jar
           overwrite_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

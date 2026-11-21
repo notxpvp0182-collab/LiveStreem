@@ -1,20 +1,13 @@
-# Aurora Liquid Glass (Minecraft 1.21.11, Fabric)
+# LiveStream Mod (YouTube Live Chat & Telemetry HUD)
 
-Dark liquid-glass UI, HUD editor and YouTube live stream overlay.
+Dark Liquid-Glass UI, HUD Editor, Real-Time Live Watching, Total Views, Likes, Subscribers & Smooth Animated YouTube Live Chat for Minecraft Fabric.
 
-## Build
-- GitHub Actions: push this folder to a repo; the `Build` workflow produces `liquidglass-jar`.
-- Local: `gradle build` (Java 21, Gradle 8.14+). Jar is in `build/libs/`.
+## 📥 Direct Downloads (Click to Download)
 
-## Use
-1. Press Right Shift (or Mod Menu > Configure) to open the GUI.
-2. Open the stream workspace panel, paste a YouTube live URL and your own YouTube Data API v3 key.
-3. Press Connect. Use Edit HUD to move and resize elements.
-
-## YouTube API key
-Create a key in Google Cloud Console (enable "YouTube Data API v3"). The key is stored only in
-`config/liquidglass.json` on your machine. Default quota is 10,000 units/day. Live chat polling costs
-about 5 units per request, so one stream can use a large part of the quota within a few hours.
-
-## Not built or tested
-This project was assembled without a Minecraft build environment. Compile it first and report any errors.
+### Minecraft 1.21 – 1.21.5
+1. 📥 **[LiveStream 1.21](https://github.com/notxpvp0182-collab/LiveStreem/releases/download/all-versions/LiveStream-1.21.jar)**
+2. 📥 **[LiveStream 1.21.1](https://github.com/notxpvp0182-collab/LiveStreem/releases/download/all-versions/LiveStream-1.21.1.jar)**
+3. 📥 **[LiveStream 1.21.2](https://github.com/notxpvp0182-collab/LiveStreem/releases/download/all-versions/LiveStream-1.21.2.jar)**
+4. 📥 **[LiveStream 1.21.3](https://github.com/notxpvp0182-collab/LiveStreem/releases/download/all-versions/LiveStream-1.21.3.jar)**
+5. 📥 **[LiveStream 1.21.4](https://github.com/notxpvp0182-collab/LiveStreem/releases/download/all-versions/LiveStream-1.21.4.jar)**
+6. 📥 **[LiveStream 1.21.5](https://github.com/notxpvp0182-collab/LiveStreem/releases/download/all-versions/LiveStream-1.21.5.jar)**

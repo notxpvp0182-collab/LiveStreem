@@ -60,7 +60,7 @@ public final class LiveChatElement extends HudElement {
     public int timestampColor = 0xFF8A909E;
     public int maxVisibleMessages = 14;
     public float lineSpacing = 13.0f;
-    public float entranceDurationSec = 0.58f;
+    public float entranceDurationSec = 0.65f;
 
     private static volatile int scrollLineOffset = 0;
 
@@ -339,11 +339,11 @@ public final class LiveChatElement extends HudElement {
         float ageSec = (nowNs - startNs) / 1_000_000_000.0f;
         float rawT = ageSec < duration ? Math.max(0.0f, Math.min(1.0f, ageSec / duration)) : 1.0f;
 
-        float easeCubic = 1.0f - (float) Math.pow(1.0f - rawT, 3);
+        float easeCubic = 1.0f - (1.0f - rawT) * (1.0f - rawT);
         float easeQuart = 1.0f - (float) Math.pow(1.0f - rawT, 4);
         float easeBack = 1.0f + 2.2f * (float) Math.pow(rawT - 1.0f, 3) + 1.2f * (float) Math.pow(rawT - 1.0f, 2);
 
-        float leftSpan = Math.max(135.0f, width() * 0.62f);
+        float leftSpan = 42.0f;
         float slideX = 0.0f;
         float slideY = 0.0f;
         float popScale = 1.0f;

@@ -16,7 +16,6 @@
     "fabricloader": "*",
     "minecraft": "1.21",
     "java": ">=21",
-    "fabric-api": "*",
-    "modmenu": "*"
+    "fabric-api": "*"
   }
 }
