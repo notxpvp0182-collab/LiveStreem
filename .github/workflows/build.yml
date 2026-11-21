@@ -44,7 +44,7 @@ jobs:
       - name: Setup Gradle 9.6.0
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '9.6.0'
+          gradle-version: '9.7.0'
 
       - name: Configure Version ${{ matrix.mc }} via sed
         run: |
