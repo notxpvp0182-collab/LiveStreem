@@ -1,4 +1,4 @@
-name: Build Batch 1 (1.21 - 1.21.5)
+name: Build Batch 2 (1.21.6 - 1.21.8)
 
 on:
   push:
@@ -15,30 +15,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - mc: "1.21"
-            yarn: "1.21+build.9"
+          - mc: "1.21.6"
+            yarn: "1.21.6+build.1"
             loader: "0.16.14"
-            fabric: "0.102.0+1.21"
-          - mc: "1.21.1"
-            yarn: "1.21.1+build.3"
+            fabric: "0.128.2+1.21.6"
+          - mc: "1.21.7"
+            yarn: "1.21.7+build.8"
             loader: "0.16.14"
-            fabric: "0.116.0+1.21.1"
-          - mc: "1.21.2"
-            yarn: "1.21.2+build.1"
+            fabric: "0.129.0+1.21.7"
+          - mc: "1.21.8"
+            yarn: "1.21.8+build.1"
             loader: "0.16.14"
-            fabric: "0.106.1+1.21.2"
-          - mc: "1.21.3"
-            yarn: "1.21.3+build.2"
-            loader: "0.16.14"
-            fabric: "0.114.0+1.21.3"
-          - mc: "1.21.4"
-            yarn: "1.21.4+build.8"
-            loader: "0.16.14"
-            fabric: "0.119.2+1.21.4"
-          - mc: "1.21.5"
-            yarn: "1.21.5+build.1"
-            loader: "0.16.14"
-            fabric: "0.123.2+1.21.5"
+            fabric: "0.129.0+1.21.8"
 
     steps:
       - name: Checkout Repository

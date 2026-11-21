@@ -11,3 +11,8 @@ Dark Liquid-Glass UI, HUD Editor, Real-Time Live Watching, Total Views, Likes, S
 4. 📥 **[LiveStream 1.21.3](https://github.com/notxpvp0182-collab/LiveStreem/releases/download/all-versions/LiveStream-1.21.3.jar)**
 5. 📥 **[LiveStream 1.21.4](https://github.com/notxpvp0182-collab/LiveStreem/releases/download/all-versions/LiveStream-1.21.4.jar)**
 6. 📥 **[LiveStream 1.21.5](https://github.com/notxpvp0182-collab/LiveStreem/releases/download/all-versions/LiveStream-1.21.5.jar)**
+
+### Minecraft 1.21.6 – 1.21.8
+7. 📥 **[LiveStream 1.21.6](https://github.com/notxpvp0182-collab/LiveStreem/releases/download/all-versions/LiveStream-1.21.6.jar)**
+8. 📥 **[LiveStream 1.21.7](https://github.com/notxpvp0182-collab/LiveStreem/releases/download/all-versions/LiveStream-1.21.7.jar)**
+9. 📥 **[LiveStream 1.21.8](https://github.com/notxpvp0182-collab/LiveStreem/releases/download/all-versions/LiveStream-1.21.8.jar)**

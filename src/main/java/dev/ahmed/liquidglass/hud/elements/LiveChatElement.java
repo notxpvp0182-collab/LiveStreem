@@ -11,7 +11,7 @@ import dev.ahmed.liquidglass.youtube.ChatPopoutHelper;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.util.math.MatrixStack;
+import org.joml.Matrix3x2fStack;
 
 import java.awt.Color;
 import java.time.Instant;
@@ -380,11 +380,11 @@ public final class LiveChatElement extends HudElement {
             : 255;
         float finalScale = style().scale * popScale;
 
-        MatrixStack matrices = ctx.getMatrices();
-        matrices.push();
-        matrices.translate(x() + 6.0f + slideX, drawY + slideY, 0.0f);
+        Matrix3x2fStack matrices = ctx.getMatrices();
+        matrices.pushMatrix();
+        matrices.translate(x() + 6.0f + slideX, drawY + slideY);
         if (Math.abs(finalScale - 1.0f) > 0.001f) {
-            matrices.scale(finalScale, finalScale, 1.0f);
+            matrices.scale(finalScale, finalScale);
         }
 
         int prefixW = line.prefixWidth();
@@ -423,7 +423,7 @@ public final class LiveChatElement extends HudElement {
         int mCol = UIRenderer.withAlpha(resolveMessageColor(msg, line.msgIndex()), alpha);
         EmojiRenderer.drawRichText(ctx, tr, line.contentPart(), prefixW, 0, mCol, style().smallCaps, textShadow);
 
-        matrices.pop();
+        matrices.popMatrix();
     }
 
     private String formatAuthorColumn(String author) {

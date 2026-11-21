@@ -3,7 +3,7 @@ package dev.ahmed.liquidglass.ui.font;
 import dev.ahmed.liquidglass.ui.theme.GlassQuality;
 import dev.ahmed.liquidglass.ui.theme.ThemeManager;
 import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.util.math.MatrixStack;
+import org.joml.Matrix3x2fStack;
 
 import java.io.DataInputStream;
 import java.io.InputStream;
@@ -116,10 +116,10 @@ public final class BengaliFontEngine {
         int rgb = color & 0x00FFFFFF;
         boolean highQualityShadow = shadow && ThemeManager.get().quality() != GlassQuality.LOW;
 
-        MatrixStack m = ctx.getMatrices();
-        m.push();
-        m.translate(x, y - 1.8f, 0.0f);
-        m.scale(HD_SCALE, HD_SCALE, 1.0f);
+        Matrix3x2fStack m = ctx.getMatrices();
+        m.pushMatrix();
+        m.translate(x, y - 1.8f);
+        m.scale(HD_SCALE, HD_SCALE);
 
         int cursorSubX = 0;
         if (highQualityShadow) {
@@ -154,7 +154,7 @@ public final class BengaliFontEngine {
             cursorSubX += g.advanceSubPx();
         }
 
-        m.pop();
+        m.popMatrix();
         return cursorSubX * HD_SCALE;
     }
 }

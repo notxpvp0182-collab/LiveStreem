@@ -6,7 +6,7 @@ import dev.ahmed.liquidglass.ui.theme.ThemeTokens;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.util.math.MatrixStack;
+import org.joml.Matrix3x2fStack;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -112,10 +112,10 @@ public final class UIRenderer {
         if (baseAlpha <= 1 || w <= 0 || h <= 0) return;
         int rgb = color & 0x00FFFFFF;
 
-        MatrixStack m = ctx.getMatrices();
-        m.push();
-        m.translate(x, y, 0.0f);
-        m.scale(0.25f, 0.25f, 1.0f); // 4x Full HD coordinate space
+        Matrix3x2fStack m = ctx.getMatrices();
+        m.pushMatrix();
+        m.translate(x, y);
+        m.scale(0.25f, 0.25f); // 4x Full HD coordinate space
 
         int iw = Math.round(w * 4.0f);
         int ih = Math.round(h * 4.0f);
@@ -123,7 +123,7 @@ public final class UIRenderer {
 
         if (r <= 1) {
             ctx.fill(0, 0, iw, ih, color);
-            m.pop();
+            m.popMatrix();
             return;
         }
 
@@ -158,17 +158,17 @@ public final class UIRenderer {
         if (ih - r > r) {
             ctx.fill(0, r, iw, ih - r, color);
         }
-        m.pop();
+        m.popMatrix();
     }
 
     public static void drawRoundedBorder(DrawContext ctx, float x, float y, float w, float h, float radius, float thickness, int color) {
         int baseAlpha = (color >>> 24) & 0xFF;
         if (baseAlpha <= 2 || w <= 2 || h <= 2) return;
 
-        MatrixStack m = ctx.getMatrices();
-        m.push();
-        m.translate(x, y, 0.0f);
-        m.scale(0.25f, 0.25f, 1.0f); // 4x Full HD resolution
+        Matrix3x2fStack m = ctx.getMatrices();
+        m.pushMatrix();
+        m.translate(x, y);
+        m.scale(0.25f, 0.25f); // 4x Full HD resolution
 
         int iw = Math.round(w * 4.0f);
         int ih = Math.round(h * 4.0f);
@@ -180,7 +180,7 @@ public final class UIRenderer {
             ctx.fill(0, ih - t, iw, ih, color);
             ctx.fill(0, t, t, ih - t, color);
             ctx.fill(iw - t, t, iw, ih - t, color);
-            m.pop();
+            m.popMatrix();
             return;
         }
 
@@ -219,21 +219,21 @@ public final class UIRenderer {
             dy = yEnd;
         }
 
-        m.pop();
+        m.popMatrix();
     }
 
     public static void drawText(DrawContext ctx, String text, float x, float y, int color, float scale, boolean smallCaps, boolean shadow) {
         if (text == null || text.isEmpty()) return;
         TextRenderer tr = MinecraftClient.getInstance().textRenderer;
 
-        MatrixStack matrices = ctx.getMatrices();
-        matrices.push();
-        matrices.translate(x, y, 0.0f);
+        Matrix3x2fStack matrices = ctx.getMatrices();
+        matrices.pushMatrix();
+        matrices.translate(x, y);
         if (Math.abs(scale - 1.0f) > 0.001f) {
-            matrices.scale(scale, scale, 1.0f);
+            matrices.scale(scale, scale);
         }
         EmojiRenderer.drawRichText(ctx, tr, text, 0, 0, color, smallCaps, shadow);
-        matrices.pop();
+        matrices.popMatrix();
     }
 
     public static int withAlpha(int argb, int alpha255) {

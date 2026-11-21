@@ -13,7 +13,7 @@ import dev.ahmed.liquidglass.ui.theme.ThemeTokens;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.text.Text;
-import net.minecraft.client.util.math.MatrixStack;
+import org.joml.Matrix3x2fStack;
 import org.lwjgl.glfw.GLFW;
 
 public final class WorkspaceModalScreen extends Screen {
@@ -56,11 +56,11 @@ public final class WorkspaceModalScreen extends Screen {
         ctx.fill(0, 0, this.width, this.height, UIRenderer.withAlpha(t.bgOverlay(), (int) (185 * progress)));
 
         float scale = 0.93f + 0.07f * progress;
-        MatrixStack matrices = ctx.getMatrices();
-        matrices.push();
-        matrices.translate(this.width * 0.5f, this.height * 0.5f + (1.0f - progress) * 10.0f, 0.0f);
-        matrices.scale(scale, scale, 1.0f);
-        matrices.translate(-this.width * 0.5f, -this.height * 0.5f, 0.0f);
+        Matrix3x2fStack matrices = ctx.getMatrices();
+        matrices.pushMatrix();
+        matrices.translate(this.width * 0.5f, this.height * 0.5f + (1.0f - progress) * 10.0f);
+        matrices.scale(scale, scale);
+        matrices.translate(-this.width * 0.5f, -this.height * 0.5f);
 
         float modalW = Math.min(520.0f, this.width - 40.0f);
         float modalH = Math.min(310.0f, this.height - 40.0f);
@@ -142,7 +142,7 @@ public final class WorkspaceModalScreen extends Screen {
         drawTelemetryCard(ctx, mainX + 20 + cardW, mainY + 170, cardW, 42,
             "Likes", snap.likeCount() != null ? HudManager.formatCompactNumber(snap.likeCount()) : "--");
 
-        matrices.pop();
+        matrices.popMatrix();
     }
 
     private void drawButton(DrawContext ctx, float x, float y, float w, float h, String label, int mouseX, int mouseY) {

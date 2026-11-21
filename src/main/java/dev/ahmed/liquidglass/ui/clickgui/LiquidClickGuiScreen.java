@@ -18,7 +18,7 @@ import dev.ahmed.liquidglass.ui.theme.ThemeTokens;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.text.Text;
-import net.minecraft.client.util.math.MatrixStack;
+import org.joml.Matrix3x2fStack;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
@@ -192,11 +192,11 @@ public final class LiquidClickGuiScreen extends Screen {
         float dmx = toDesignX(mouseX);
         float dmy = toDesignY(mouseY);
 
-        MatrixStack matrices = ctx.getMatrices();
-        matrices.push();
-        matrices.translate(this.width * 0.5f, this.height * 0.5f, 0.0f);
-        matrices.scale(animScale, animScale, 1.0f);
-        matrices.translate(-this.width * 0.5f, -this.height * 0.5f, 0.0f);
+        Matrix3x2fStack matrices = ctx.getMatrices();
+        matrices.pushMatrix();
+        matrices.translate(this.width * 0.5f, this.height * 0.5f);
+        matrices.scale(animScale, animScale);
+        matrices.translate(-this.width * 0.5f, -this.height * 0.5f);
 
         float centerX = this.width * 0.5f;
         float centerY = this.height * 0.5f;
@@ -344,7 +344,7 @@ public final class LiquidClickGuiScreen extends Screen {
             ctx.disableScissor();
         }
 
-        matrices.pop();
+        matrices.popMatrix();
     }
 
     private void drawDockButton(DrawContext ctx, float x, float y, float w, float h, String label, float dmx, float dmy) {
