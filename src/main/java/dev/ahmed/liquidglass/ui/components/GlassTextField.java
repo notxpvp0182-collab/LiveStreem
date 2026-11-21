@@ -49,7 +49,7 @@ public final class GlassTextField {
         selectionAnchor = a;
     }
 
-    public void extractRenderState(GuiGraphicsExtractor ctx, float x, float y, float w, float h, float mouseX, float mouseY, float dt) {
+    public void render(GuiGraphicsExtractor ctx, float x, float y, float w, float h, float mouseX, float mouseY, float dt) {
         this.lastBoxX = x;
         this.lastBoxW = w;
         ThemeTokens t = ThemeManager.get().tokens();

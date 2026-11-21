@@ -25,7 +25,7 @@ public final class GlassToggle {
         this.hoverAnim = new Animation(0.0f, 0.14f, Animation.Easing.EASE_OUT_CUBIC);
     }
 
-    public void extractRenderState(GuiGraphicsExtractor ctx, float x, float y, float w, float h, float mouseX, float mouseY, float dt) {
+    public void render(GuiGraphicsExtractor ctx, float x, float y, float w, float h, float mouseX, float mouseY, float dt) {
         ThemeTokens t = ThemeManager.get().tokens();
         boolean hovered = mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + h;
         boolean state = getter.getAsBoolean();

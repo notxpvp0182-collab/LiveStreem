@@ -156,7 +156,7 @@ public final class LiveChatElement extends HudElement {
         StreamManager.get().tickChatPacing();
         ThemeTokens t = ThemeManager.get().tokens();
         Deque<StreamManager.ChatMessage> queue = StreamManager.get().chatMessages();
-        boolean inHudEditor = Minecraft.getInstance().currentScreen instanceof HudEditorScreen;
+        boolean inHudEditor = Minecraft.getInstance().screen instanceof HudEditorScreen;
 
         ctx.enableScissor(
             Math.round(x() + 2), Math.round(y() + 2),

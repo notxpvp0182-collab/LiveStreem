@@ -25,7 +25,7 @@ public final class GlassDropdown {
         this.onSelect = onSelect;
     }
 
-    public void extractRenderState(GuiGraphicsExtractor ctx, float x, float y, float w, float h, float mouseX, float mouseY, float dt) {
+    public void render(GuiGraphicsExtractor ctx, float x, float y, float w, float h, float mouseX, float mouseY, float dt) {
         ThemeTokens t = ThemeManager.get().tokens();
         openAnim.animateTo(expanded ? 1.0f : 0.0f);
         float progress = openAnim.update(dt);
