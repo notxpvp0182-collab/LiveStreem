@@ -4,7 +4,7 @@ import dev.ahmed.liquidglass.ui.animation.Animation;
 import dev.ahmed.liquidglass.ui.render.UIRenderer;
 import dev.ahmed.liquidglass.ui.theme.ThemeManager;
 import dev.ahmed.liquidglass.ui.theme.ThemeTokens;
-import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
@@ -25,7 +25,7 @@ public final class GlassToggle {
         this.hoverAnim = new Animation(0.0f, 0.14f, Animation.Easing.EASE_OUT_CUBIC);
     }
 
-    public void render(DrawContext ctx, float x, float y, float w, float h, float mouseX, float mouseY, float dt) {
+    public void extractRenderState(GuiGraphicsExtractor ctx, float x, float y, float w, float h, float mouseX, float mouseY, float dt) {
         ThemeTokens t = ThemeManager.get().tokens();
         boolean hovered = mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + h;
         boolean state = getter.getAsBoolean();

@@ -8,9 +8,9 @@ import dev.ahmed.liquidglass.ui.render.UIRenderer;
 import dev.ahmed.liquidglass.ui.theme.ThemeManager;
 import dev.ahmed.liquidglass.ui.theme.ThemeTokens;
 import dev.ahmed.liquidglass.youtube.ChatPopoutHelper;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.font.TextRenderer;
-import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import org.joml.Matrix3x2fStack;
 
 import java.awt.Color;
@@ -148,7 +148,7 @@ public final class LiveChatElement extends HudElement {
     }
 
     @Override
-    protected void renderContent(DrawContext ctx) {
+    protected void renderContent(GuiGraphicsExtractor ctx) {
         long nowNs = System.nanoTime();
         float dt = Math.min(0.05f, Math.max(0.001f, (nowNs - lastRenderNs) / 1_000_000_000.0f));
         lastRenderNs = nowNs;
@@ -156,7 +156,7 @@ public final class LiveChatElement extends HudElement {
         StreamManager.get().tickChatPacing();
         ThemeTokens t = ThemeManager.get().tokens();
         Deque<StreamManager.ChatMessage> queue = StreamManager.get().chatMessages();
-        boolean inHudEditor = MinecraftClient.getInstance().currentScreen instanceof HudEditorScreen;
+        boolean inHudEditor = Minecraft.getInstance().currentScreen instanceof HudEditorScreen;
 
         ctx.enableScissor(
             Math.round(x() + 2), Math.round(y() + 2),
@@ -182,7 +182,7 @@ public final class LiveChatElement extends HudElement {
             snapshot = new ArrayList<>(queue);
         }
 
-        TextRenderer tr = MinecraftClient.getInstance().textRenderer;
+        Font tr = Minecraft.getInstance().font;
         int availWidth = Math.max(60, Math.round((width() - 14.0f) / Math.max(0.45f, style().scale)));
         int currentTotal = queue.isEmpty() ? (int) (System.currentTimeMillis() / 2000L) : StreamManager.get().totalChatReceived();
         float stepY = lineSpacing * style().scale;
@@ -232,7 +232,7 @@ public final class LiveChatElement extends HudElement {
                 String author = showUsername ? formatAuthorColumn(msg.author()) : "";
 
                 int badgeW = (showYouTubeIcon ? 14 : 0) + ((msg.owner() || msg.moderator() || msg.member()) ? 10 : 0);
-                int prefixW = badgeW + tr.getWidth(ts + author);
+                int prefixW = badgeW + tr.width(ts + author);
                 int lineAvail = Math.max(36, availWidth - prefixW);
 
                 List<String> wrapped = wrapCache.computeIfAbsent(msg.id() + "_" + lineAvail, id -> {
@@ -330,7 +330,7 @@ public final class LiveChatElement extends HudElement {
         ctx.disableScissor();
     }
 
-    private void drawSingleDisplayLine(DrawContext ctx, TextRenderer tr, DisplayLine line, float drawY, long nowNs) {
+    private void drawSingleDisplayLine(GuiGraphicsExtractor ctx, Font tr, DisplayLine line, float drawY, long nowNs) {
         StreamManager.ChatMessage msg = line.msg();
         long startNs = firstRenderNsMap.computeIfAbsent(msg.id(), k -> nowNs);
         if (nowNs < startNs) return; // Waiting for stagger delay
@@ -380,7 +380,7 @@ public final class LiveChatElement extends HudElement {
             : 255;
         float finalScale = style().scale * popScale;
 
-        Matrix3x2fStack matrices = ctx.getMatrices();
+        Matrix3x2fStack matrices = ctx.pose();
         matrices.pushMatrix();
         matrices.translate(x() + 6.0f + slideX, drawY + slideY);
         if (Math.abs(finalScale - 1.0f) > 0.001f) {
@@ -409,13 +409,13 @@ public final class LiveChatElement extends HudElement {
                 cursorX += EmojiRenderer.drawRoleBadge(ctx, cursorX, 0, msg.owner(), msg.moderator(), msg.member(), alpha);
             }
             if (!line.timestampPart().isEmpty()) {
-                ctx.drawText(tr, line.timestampPart(), Math.round(cursorX), 0,
+                ctx.text(tr, line.timestampPart(), Math.round(cursorX), 0,
                     UIRenderer.withAlpha(timestampColor, alpha), textShadow);
-                cursorX += tr.getWidth(line.timestampPart());
+                cursorX += tr.width(line.timestampPart());
             }
             if (!line.authorPart().isEmpty()) {
                 int aCol = resolveAuthorColor(msg, line.msgIndex());
-                ctx.drawText(tr, line.authorPart(), Math.round(cursorX), 0,
+                ctx.text(tr, line.authorPart(), Math.round(cursorX), 0,
                     UIRenderer.withAlpha(aCol, alpha), textShadow);
             }
         }
@@ -459,7 +459,7 @@ public final class LiveChatElement extends HudElement {
         return messageColor;
     }
 
-    private List<String> wrapTextToWidth(TextRenderer tr, String text, int firstMaxW, int nextMaxW) {
+    private List<String> wrapTextToWidth(Font tr, String text, int firstMaxW, int nextMaxW) {
         List<String> lines = new ArrayList<>();
         if (text == null || text.isEmpty()) {
             lines.add("");
@@ -489,7 +489,7 @@ public final class LiveChatElement extends HudElement {
         return lines;
     }
 
-    private int findWrapCutIndex(TextRenderer tr, String str, int maxW) {
+    private int findWrapCutIndex(Font tr, String str, int maxW) {
         int lastSpace = -1;
         int idx = 0;
         while (idx < str.length()) {

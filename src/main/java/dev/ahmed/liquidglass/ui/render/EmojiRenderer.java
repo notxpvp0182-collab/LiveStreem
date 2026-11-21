@@ -3,15 +3,15 @@ package dev.ahmed.liquidglass.ui.render;
 import dev.ahmed.liquidglass.ui.font.BengaliFontEngine;
 import dev.ahmed.liquidglass.ui.font.SmallCapsRenderer;
 import dev.ahmed.liquidglass.ui.font.WorldLanguageShaper;
-import net.minecraft.client.font.TextRenderer;
-import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import org.joml.Matrix3x2fStack;
 
 public final class EmojiRenderer {
     private EmojiRenderer() {}
 
-    public static float drawYouTubeBadge(DrawContext ctx, float x, float y, int alpha) {
-        Matrix3x2fStack m = ctx.getMatrices();
+    public static float drawYouTubeBadge(GuiGraphicsExtractor ctx, float x, float y, int alpha) {
+        Matrix3x2fStack m = ctx.pose();
         m.pushMatrix();
         m.translate(x, y);
         m.scale(0.5f, 0.5f);
@@ -32,9 +32,9 @@ public final class EmojiRenderer {
         return 13.5f;
     }
 
-    public static float drawRoleBadge(DrawContext ctx, float x, float y, boolean owner, boolean mod, boolean member, int alpha) {
+    public static float drawRoleBadge(GuiGraphicsExtractor ctx, float x, float y, boolean owner, boolean mod, boolean member, int alpha) {
         if (!owner && !mod && !member) return 0.0f;
-        Matrix3x2fStack m = ctx.getMatrices();
+        Matrix3x2fStack m = ctx.pose();
         m.pushMatrix();
         m.translate(x, y);
         m.scale(0.5f, 0.5f);
@@ -51,7 +51,7 @@ public final class EmojiRenderer {
         return 10.0f;
     }
 
-    public static int measureRichTextWidth(TextRenderer tr, String raw, boolean smallCaps) {
+    public static int measureRichTextWidth(Font tr, String raw, boolean smallCaps) {
         if (raw == null || raw.isEmpty()) return 0;
         String input = smallCaps ? SmallCapsRenderer.toSmallCaps(raw) : raw;
         int width = 0;
@@ -68,7 +68,7 @@ public final class EmojiRenderer {
             }
             if (BengaliFontEngine.isBengaliChar(cp)) {
                 if (!latinSeg.isEmpty()) {
-                    width += tr.getWidth(WorldLanguageShaper.shape(latinSeg.toString()));
+                    width += tr.width(WorldLanguageShaper.shape(latinSeg.toString()));
                     latinSeg.setLength(0);
                 }
                 bnSeg.appendCodePoint(cp);
@@ -81,7 +81,7 @@ public final class EmojiRenderer {
 
             if (isRegionalIndicator(cp)) {
                 if (!latinSeg.isEmpty()) {
-                    width += tr.getWidth(WorldLanguageShaper.shape(latinSeg.toString()));
+                    width += tr.width(WorldLanguageShaper.shape(latinSeg.toString()));
                     latinSeg.setLength(0);
                 }
                 if (i + charCount < len && isRegionalIndicator(input.codePointAt(i + charCount))) {
@@ -94,7 +94,7 @@ public final class EmojiRenderer {
             }
             if (isColorEmoji(cp)) {
                 if (!latinSeg.isEmpty()) {
-                    width += tr.getWidth(WorldLanguageShaper.shape(latinSeg.toString()));
+                    width += tr.width(WorldLanguageShaper.shape(latinSeg.toString()));
                     latinSeg.setLength(0);
                 }
                 width += 10;
@@ -107,12 +107,12 @@ public final class EmojiRenderer {
             width += BengaliFontEngine.measureBengaliWidth(bnSeg.toString());
         }
         if (!latinSeg.isEmpty()) {
-            width += tr.getWidth(WorldLanguageShaper.shape(latinSeg.toString()));
+            width += tr.width(WorldLanguageShaper.shape(latinSeg.toString()));
         }
         return width;
     }
 
-    public static float drawRichText(DrawContext ctx, TextRenderer tr, String raw, float x, float y,
+    public static float drawRichText(GuiGraphicsExtractor ctx, Font tr, String raw, float x, float y,
                                      int color, boolean smallCaps, boolean shadow) {
         if (raw == null || raw.isEmpty()) return 0.0f;
         String input = smallCaps ? SmallCapsRenderer.toSmallCaps(raw) : raw;
@@ -132,8 +132,8 @@ public final class EmojiRenderer {
             if (BengaliFontEngine.isBengaliChar(cp)) {
                 if (!latinSeg.isEmpty()) {
                     String s = WorldLanguageShaper.shape(latinSeg.toString());
-                    ctx.drawText(tr, s, Math.round(cursorX), Math.round(y), color, shadow);
-                    cursorX += tr.getWidth(s);
+                    ctx.text(tr, s, Math.round(cursorX), Math.round(y), color, shadow);
+                    cursorX += tr.width(s);
                     latinSeg.setLength(0);
                 }
                 bnSeg.appendCodePoint(cp);
@@ -147,8 +147,8 @@ public final class EmojiRenderer {
             if (isRegionalIndicator(cp)) {
                 if (!latinSeg.isEmpty()) {
                     String s = WorldLanguageShaper.shape(latinSeg.toString());
-                    ctx.drawText(tr, s, Math.round(cursorX), Math.round(y), color, shadow);
-                    cursorX += tr.getWidth(s);
+                    ctx.text(tr, s, Math.round(cursorX), Math.round(y), color, shadow);
+                    cursorX += tr.width(s);
                     latinSeg.setLength(0);
                 }
                 int secondCp = 0;
@@ -165,8 +165,8 @@ public final class EmojiRenderer {
             if (isColorEmoji(cp)) {
                 if (!latinSeg.isEmpty()) {
                     String s = WorldLanguageShaper.shape(latinSeg.toString());
-                    ctx.drawText(tr, s, Math.round(cursorX), Math.round(y), color, shadow);
-                    cursorX += tr.getWidth(s);
+                    ctx.text(tr, s, Math.round(cursorX), Math.round(y), color, shadow);
+                    cursorX += tr.width(s);
                     latinSeg.setLength(0);
                 }
                 drawColorEmojiIcon(ctx, cp, cursorX + 0.5f, y, alpha);
@@ -181,8 +181,8 @@ public final class EmojiRenderer {
         }
         if (!latinSeg.isEmpty()) {
             String s = WorldLanguageShaper.shape(latinSeg.toString());
-            ctx.drawText(tr, s, Math.round(cursorX), Math.round(y), color, shadow);
-            cursorX += tr.getWidth(s);
+            ctx.text(tr, s, Math.round(cursorX), Math.round(y), color, shadow);
+            cursorX += tr.width(s);
         }
         return cursorX - x;
     }
@@ -191,8 +191,8 @@ public final class EmojiRenderer {
         return cp >= 0x1F1E6 && cp <= 0x1F1FF;
     }
 
-    private static void drawFlagEmoji(DrawContext ctx, int firstCp, int secondCp, float x, float y, int alpha) {
-        Matrix3x2fStack m = ctx.getMatrices();
+    private static void drawFlagEmoji(GuiGraphicsExtractor ctx, int firstCp, int secondCp, float x, float y, int alpha) {
+        Matrix3x2fStack m = ctx.pose();
         m.pushMatrix();
         m.translate(x, y + 0.5f);
         m.scale(0.5f, 0.5f);
@@ -224,8 +224,8 @@ public final class EmojiRenderer {
             || (cp >= 0x1F300 && cp <= 0x1FAFF);
     }
 
-    private static void drawColorEmojiIcon(DrawContext ctx, int cp, float fx, float fy, int alpha) {
-        Matrix3x2fStack m = ctx.getMatrices();
+    private static void drawColorEmojiIcon(GuiGraphicsExtractor ctx, int cp, float fx, float fy, int alpha) {
+        Matrix3x2fStack m = ctx.pose();
         m.pushMatrix();
         m.translate(fx, fy);
         m.scale(0.5f, 0.5f);
@@ -340,7 +340,7 @@ public final class EmojiRenderer {
         m.popMatrix();
     }
 
-    private static void drawSmoothCircleFace(DrawContext ctx, int baseCol, int hiCol) {
+    private static void drawSmoothCircleFace(GuiGraphicsExtractor ctx, int baseCol, int hiCol) {
         ctx.fill(5, 1, 13, 17, baseCol);
         ctx.fill(3, 2, 15, 16, baseCol);
         ctx.fill(2, 3, 16, 15, baseCol);

@@ -3,9 +3,9 @@ package dev.ahmed.liquidglass.ui.render;
 import dev.ahmed.liquidglass.ui.theme.GlassQuality;
 import dev.ahmed.liquidglass.ui.theme.ThemeManager;
 import dev.ahmed.liquidglass.ui.theme.ThemeTokens;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.font.TextRenderer;
-import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import org.joml.Matrix3x2fStack;
 
 import java.util.ArrayList;
@@ -55,7 +55,7 @@ public final class UIRenderer {
     private UIRenderer() {}
 
     public static void drawGlassPanel(
-        DrawContext ctx,
+        GuiGraphicsExtractor ctx,
         float x, float y, float w, float h,
         float radius,
         int surfaceColor,
@@ -90,7 +90,7 @@ public final class UIRenderer {
         }
     }
 
-    public static void drawShadow(DrawContext ctx, float x, float y, float w, float h, float radius, float spread, int shadowColor) {
+    public static void drawShadow(GuiGraphicsExtractor ctx, float x, float y, float w, float h, float radius, float spread, int shadowColor) {
         int baseAlpha = (shadowColor >>> 24) & 0xFF;
         if (baseAlpha <= 4) return;
         int rgb = shadowColor & 0x00FFFFFF;
@@ -102,17 +102,17 @@ public final class UIRenderer {
         }
     }
 
-    public static void drawRoundedRect(DrawContext ctx, float x, float y, float w, float h, float radius, int color) {
+    public static void drawRoundedRect(GuiGraphicsExtractor ctx, float x, float y, float w, float h, float radius, int color) {
         boolean feather = ThemeManager.get().quality().innerHighlightEnabled();
         drawRoundedRectFast(ctx, x, y, w, h, radius, color, feather);
     }
 
-    private static void drawRoundedRectFast(DrawContext ctx, float x, float y, float w, float h, float radius, int color, boolean featherAA) {
+    private static void drawRoundedRectFast(GuiGraphicsExtractor ctx, float x, float y, float w, float h, float radius, int color, boolean featherAA) {
         int baseAlpha = (color >>> 24) & 0xFF;
         if (baseAlpha <= 1 || w <= 0 || h <= 0) return;
         int rgb = color & 0x00FFFFFF;
 
-        Matrix3x2fStack m = ctx.getMatrices();
+        Matrix3x2fStack m = ctx.pose();
         m.pushMatrix();
         m.translate(x, y);
         m.scale(0.25f, 0.25f); // 4x Full HD coordinate space
@@ -161,11 +161,11 @@ public final class UIRenderer {
         m.popMatrix();
     }
 
-    public static void drawRoundedBorder(DrawContext ctx, float x, float y, float w, float h, float radius, float thickness, int color) {
+    public static void drawRoundedBorder(GuiGraphicsExtractor ctx, float x, float y, float w, float h, float radius, float thickness, int color) {
         int baseAlpha = (color >>> 24) & 0xFF;
         if (baseAlpha <= 2 || w <= 2 || h <= 2) return;
 
-        Matrix3x2fStack m = ctx.getMatrices();
+        Matrix3x2fStack m = ctx.pose();
         m.pushMatrix();
         m.translate(x, y);
         m.scale(0.25f, 0.25f); // 4x Full HD resolution
@@ -222,11 +222,11 @@ public final class UIRenderer {
         m.popMatrix();
     }
 
-    public static void drawText(DrawContext ctx, String text, float x, float y, int color, float scale, boolean smallCaps, boolean shadow) {
+    public static void drawText(GuiGraphicsExtractor ctx, String text, float x, float y, int color, float scale, boolean smallCaps, boolean shadow) {
         if (text == null || text.isEmpty()) return;
-        TextRenderer tr = MinecraftClient.getInstance().textRenderer;
+        Font tr = Minecraft.getInstance().font;
 
-        Matrix3x2fStack matrices = ctx.getMatrices();
+        Matrix3x2fStack matrices = ctx.pose();
         matrices.pushMatrix();
         matrices.translate(x, y);
         if (Math.abs(scale - 1.0f) > 0.001f) {

@@ -4,13 +4,12 @@ import dev.ahmed.liquidglass.ui.animation.Animation;
 import dev.ahmed.liquidglass.ui.render.UIRenderer;
 import dev.ahmed.liquidglass.ui.theme.ThemeManager;
 import dev.ahmed.liquidglass.ui.theme.ThemeTokens;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.font.TextRenderer;
-import net.minecraft.client.gui.Click;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.input.KeyInput;
-import net.minecraft.client.input.CharInput;
-import org.lwjgl.glfw.GLFW;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.CharacterEvent;
 
 public final class GlassTextField {
     private final String placeholder;
@@ -50,7 +49,7 @@ public final class GlassTextField {
         selectionAnchor = a;
     }
 
-    public void render(DrawContext ctx, float x, float y, float w, float h, float mouseX, float mouseY, float dt) {
+    public void extractRenderState(GuiGraphicsExtractor ctx, float x, float y, float w, float h, float mouseX, float mouseY, float dt) {
         this.lastBoxX = x;
         this.lastBoxW = w;
         ThemeTokens t = ThemeManager.get().tokens();
@@ -64,7 +63,7 @@ public final class GlassTextField {
 
         float rightPad = text.isEmpty() ? 6.0f : 20.0f;
         ctx.enableScissor(Math.round(x + 4), Math.round(y + 2), Math.round(x + w - rightPad), Math.round(y + h - 2));
-        TextRenderer tr = MinecraftClient.getInstance().textRenderer;
+        Font tr = Minecraft.getInstance().font;
 
         if (text.isEmpty() && !focused) {
             lastScrollX = 0.0f;
@@ -74,22 +73,22 @@ public final class GlassTextField {
             cursorIndex = Math.max(0, Math.min(shown.length(), cursorIndex));
             selectionAnchor = Math.max(0, Math.min(shown.length(), selectionAnchor));
 
-            int cursorPx = tr.getWidth(shown.substring(0, cursorIndex));
+            int cursorPx = tr.width(shown.substring(0, cursorIndex));
             float maxVisibleW = Math.max(30.0f, w - rightPad - 10.0f);
             if (cursorPx - lastScrollX > maxVisibleW) {
                 lastScrollX = cursorPx - maxVisibleW;
             } else if (cursorPx - lastScrollX < 0) {
                 lastScrollX = cursorPx;
             }
-            int totalW = tr.getWidth(shown);
+            int totalW = tr.width(shown);
             if (totalW <= maxVisibleW) lastScrollX = 0.0f;
 
             // Blue selection highlight bar
             if (focused && hasSelection()) {
                 int a = Math.min(shown.length(), selMin());
                 int b = Math.min(shown.length(), selMax());
-                float sx1 = x + 8 - lastScrollX + tr.getWidth(shown.substring(0, a));
-                float sx2 = x + 8 - lastScrollX + tr.getWidth(shown.substring(0, b));
+                float sx1 = x + 8 - lastScrollX + tr.width(shown.substring(0, a));
+                float sx2 = x + 8 - lastScrollX + tr.width(shown.substring(0, b));
                 ctx.fill(Math.round(sx1), Math.round(y + 4), Math.round(sx2), Math.round(y + h - 4), 0x8838BDF8);
             }
 
@@ -164,56 +163,56 @@ public final class GlassTextField {
         if (shown.isEmpty()) return 0;
         float relX = (float) mouseX - (lastBoxX + 8.0f) + lastScrollX;
         if (relX <= 0) return 0;
-        TextRenderer tr = MinecraftClient.getInstance().textRenderer;
+        Font tr = Minecraft.getInstance().font;
         for (int i = 1; i <= shown.length(); i++) {
-            int w = tr.getWidth(shown.substring(0, i));
+            int w = tr.width(shown.substring(0, i));
             if (w >= relX) {
-                int prevW = tr.getWidth(shown.substring(0, i - 1));
+                int prevW = tr.width(shown.substring(0, i - 1));
                 return (relX - prevW < w - relX) ? (i - 1) : i;
             }
         }
         return shown.length();
     }
 
-    public boolean keyPressed(KeyInput input) {
+    public boolean keyPressed(KeyEvent input) {
         if (!focused) return false;
         int key = input.key();
         int mods = input.modifiers();
-        boolean ctrl = (mods & (GLFW.GLFW_MOD_CONTROL | GLFW.GLFW_MOD_SUPER)) != 0;
-        boolean shift = (mods & GLFW.GLFW_MOD_SHIFT) != 0;
+        boolean ctrl = (mods & (2 | 8)) != 0;
+        boolean shift = (mods & 1) != 0;
 
         // Ctrl+A: Select All
-        if (key == GLFW.GLFW_KEY_A && ctrl) {
+        if (key == 65 && ctrl) {
             selectionAnchor = 0;
             cursorIndex = text.length();
             return true;
         }
         // Ctrl+C: Copy
-        if (key == GLFW.GLFW_KEY_C && ctrl) {
+        if (key == 67 && ctrl) {
             if (hasSelection() && !masked) {
-                MinecraftClient.getInstance().keyboard.setClipboard(text.substring(selMin(), selMax()));
+                Minecraft.getInstance().keyboardHandler.setClipboard(text.substring(selMin(), selMax()));
             }
             return true;
         }
         // Ctrl+X: Cut
-        if (key == GLFW.GLFW_KEY_X && ctrl) {
+        if (key == 88 && ctrl) {
             if (hasSelection()) {
                 if (!masked) {
-                    MinecraftClient.getInstance().keyboard.setClipboard(text.substring(selMin(), selMax()));
+                    Minecraft.getInstance().keyboardHandler.setClipboard(text.substring(selMin(), selMax()));
                 }
                 deleteSelection();
             }
             return true;
         }
         // Ctrl+V: Paste (replaces selection if any)
-        if (key == GLFW.GLFW_KEY_V && ctrl) {
-            String clip = MinecraftClient.getInstance().keyboard.getClipboard();
+        if (key == 86 && ctrl) {
+            String clip = Minecraft.getInstance().keyboardHandler.getClipboard();
             if (clip != null && !clip.isEmpty()) {
                 insert(clip.replace("\n", "").replace("\r", ""));
             }
             return true;
         }
-        if (key == GLFW.GLFW_KEY_BACKSPACE) {
+        if (key == 259) {
             if (hasSelection()) {
                 deleteSelection();
             } else if (ctrl && cursorIndex > 0) {
@@ -227,7 +226,7 @@ public final class GlassTextField {
             }
             return true;
         }
-        if (key == GLFW.GLFW_KEY_DELETE) {
+        if (key == 261) {
             if (hasSelection()) {
                 deleteSelection();
             } else if (cursorIndex < text.length()) {
@@ -235,7 +234,7 @@ public final class GlassTextField {
             }
             return true;
         }
-        if (key == GLFW.GLFW_KEY_LEFT) {
+        if (key == 263) {
             if (hasSelection() && !shift) {
                 cursorIndex = selMin();
                 selectionAnchor = cursorIndex;
@@ -245,7 +244,7 @@ public final class GlassTextField {
             }
             return true;
         }
-        if (key == GLFW.GLFW_KEY_RIGHT) {
+        if (key == 262) {
             if (hasSelection() && !shift) {
                 cursorIndex = selMax();
                 selectionAnchor = cursorIndex;
@@ -255,12 +254,12 @@ public final class GlassTextField {
             }
             return true;
         }
-        if (key == GLFW.GLFW_KEY_HOME) {
+        if (key == 268) {
             cursorIndex = 0;
             if (!shift) selectionAnchor = 0;
             return true;
         }
-        if (key == GLFW.GLFW_KEY_END) {
+        if (key == 269) {
             cursorIndex = text.length();
             if (!shift) selectionAnchor = cursorIndex;
             return true;
@@ -268,9 +267,9 @@ public final class GlassTextField {
         return false;
     }
 
-    public boolean charTyped(CharInput input) {
+    public boolean charTyped(CharacterEvent input) {
         if (!focused) return false;
-        String typed = input.asString();
+        String typed = input.codepointAsString();
         if (typed != null && !typed.isEmpty() && input.codepoint() >= 32) {
             insert(typed);
             return true;

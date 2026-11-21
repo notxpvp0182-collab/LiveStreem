@@ -15,14 +15,13 @@ import dev.ahmed.liquidglass.ui.render.UIRenderer;
 import dev.ahmed.liquidglass.ui.theme.GlassQuality;
 import dev.ahmed.liquidglass.ui.theme.ThemeManager;
 import dev.ahmed.liquidglass.ui.theme.ThemeTokens;
-import net.minecraft.client.gui.Click;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.input.KeyInput;
-import net.minecraft.client.input.CharInput;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.text.Text;
+import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.CharacterEvent;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.Component;
 import org.joml.Matrix3x2fStack;
-import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -61,7 +60,7 @@ public final class LiquidClickGuiScreen extends Screen {
     private final List<GlassSlider> activeSliders = new ArrayList<>();
 
     public LiquidClickGuiScreen() {
-        super(Text.literal("LiveStream GUI"));
+        super(Component.literal("LiveStream GUI"));
         for (int i = 0; i < Category.values().length; i++) {
             cardHoverAnims[i] = new Animation(0.0f, 0.15f, Animation.Easing.EASE_OUT_CUBIC);
             cardXAnims[i] = new Animation(0.0f, 0.24f, Animation.Easing.EASE_OUT_QUART);
@@ -172,14 +171,14 @@ public final class LiquidClickGuiScreen extends Screen {
     }
 
     @Override
-    public void render(DrawContext ctx, int mouseX, int mouseY, float deltaTicks) {
+    public void extractRenderState(GuiGraphicsExtractor ctx, int mouseX, int mouseY, float deltaTicks) {
         long now = System.nanoTime();
         float dt = Math.min(0.05f, (now - lastFrameNs) / 1_000_000_000.0f);
         lastFrameNs = now;
 
         float openProgress = openAnim.update(dt);
         if (closing && openAnim.isFinished()) {
-            if (this.client != null) this.client.setScreen(null);
+            if (this.minecraft != null) this.minecraft.setScreen(null);
             return;
         }
 
@@ -195,7 +194,7 @@ public final class LiquidClickGuiScreen extends Screen {
         float dmx = toDesignX(mouseX);
         float dmy = toDesignY(mouseY);
 
-        Matrix3x2fStack matrices = ctx.getMatrices();
+        Matrix3x2fStack matrices = ctx.pose();
         matrices.pushMatrix();
         matrices.translate(this.width * 0.5f, this.height * 0.5f);
         matrices.scale(animScale, animScale);
@@ -205,7 +204,7 @@ public final class LiquidClickGuiScreen extends Screen {
         float centerY = this.height * 0.5f;
 
         String title = "L I V E S T R E A M";
-        int titleW = this.textRenderer.getWidth(title);
+        int titleW = this.font.width(title);
         UIRenderer.drawText(ctx, title, centerX - titleW * 0.5f, centerY - 125 - expand * 32,
             UIRenderer.withAlpha(t.textPrimary(), (int) (255 * openProgress)), 1.0f, false, true);
 
@@ -262,7 +261,7 @@ public final class LiquidClickGuiScreen extends Screen {
             IconRenderer.drawIcon(ctx, cats[i].icon(), cx + (cardW - 22) * 0.5f, cardY + 14, 22, iconColor);
 
             String label = cats[i].title();
-            int lw = this.textRenderer.getWidth(label);
+            int lw = this.font.width(label);
             UIRenderer.drawText(ctx, label, cx + (cardW - lw) * 0.5f, cardY + cardH - 22,
                 t.textPrimary(), 1.0f, false, false);
             UIRenderer.drawRoundedRect(ctx, cx + cardW * 0.34f, cardY + cardH - 10, cardW * 0.32f, 1.5f, 1.0f,
@@ -292,7 +291,7 @@ public final class LiquidClickGuiScreen extends Screen {
 
             IconRenderer.drawIcon(ctx, selectedCategory.icon(), centerX - 5, py + 7, 10, t.accentPrimary());
             String catTitle = selectedCategory.title();
-            int ctw = this.textRenderer.getWidth(catTitle);
+            int ctw = this.font.width(catTitle);
             UIRenderer.drawText(ctx, catTitle, centerX - ctw * 0.5f, py + 19, t.textPrimary(), 1.0f, false, false);
 
             float btnX = px + 10;
@@ -305,7 +304,7 @@ public final class LiquidClickGuiScreen extends Screen {
             UIRenderer.drawRoundedBorder(ctx, btnX, btnY, btnW, btnH, 7.0f, 1.0f,
                 editHover ? t.borderActive() : t.borderBase());
             String topBtnText = "Edit HUD Layout";
-            UIRenderer.drawText(ctx, topBtnText, centerX - this.textRenderer.getWidth(topBtnText) * 0.5f,
+            UIRenderer.drawText(ctx, topBtnText, centerX - this.font.width(topBtnText) * 0.5f,
                 btnY + 5, t.textPrimary(), 1.0f, false, false);
 
             float listTop = py + 56;
@@ -350,13 +349,13 @@ public final class LiquidClickGuiScreen extends Screen {
         matrices.popMatrix();
     }
 
-    private void drawDockButton(DrawContext ctx, float x, float y, float w, float h, String label, float dmx, float dmy) {
+    private void drawDockButton(GuiGraphicsExtractor ctx, float x, float y, float w, float h, String label, float dmx, float dmy) {
         ThemeTokens t = ThemeManager.get().tokens();
         boolean hover = dmx >= x && dmx <= x + w && dmy >= y && dmy <= y + h;
         UIRenderer.drawGlassPanel(ctx, x, y, w, h, 8.0f,
             hover ? t.bgGlassStrong() : t.bgGlass(), hover ? t.borderActive() : t.borderBase(),
             hover ? 1.0f : 0.0f, dmx, dmy);
-        int lw = this.textRenderer.getWidth(label);
+        int lw = this.font.width(label);
         UIRenderer.drawText(ctx, label, x + (w - lw) * 0.5f, y + (h - 8) * 0.5f, t.textPrimary(), 1.0f, false, false);
     }
 
@@ -377,7 +376,7 @@ public final class LiquidClickGuiScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(Click click, boolean doubled) {
+    public boolean mouseClicked(MouseButtonEvent click, boolean doubled) {
         double mx = toDesignX(click.x());
         double my = toDesignY(click.y());
         int button = click.button();
@@ -389,11 +388,11 @@ public final class LiquidClickGuiScreen extends Screen {
 
         if (button == 0 && my >= dockY && my <= dockY + 22) {
             if (mx >= centerX - 105 && mx <= centerX - 5) {
-                if (this.client != null) this.client.setScreen(new WorkspaceModalScreen(this));
+                if (this.minecraft != null) this.minecraft.setScreen(new WorkspaceModalScreen(this));
                 return true;
             }
             if (mx >= centerX + 5 && mx <= centerX + 105) {
-                if (this.client != null) this.client.setScreen(new HudEditorScreen(this));
+                if (this.minecraft != null) this.minecraft.setScreen(new HudEditorScreen(this));
                 return true;
             }
         }
@@ -410,8 +409,8 @@ public final class LiquidClickGuiScreen extends Screen {
             float py = centerY - panelH * 0.5f;
 
             if (button == 0 && mx >= px + 10 && mx <= px + panelW - 10 && my >= py + 33 && my <= py + 51) {
-                if (this.client != null) {
-                    this.client.setScreen(new HudEditorScreen(this));
+                if (this.minecraft != null) {
+                    this.minecraft.setScreen(new HudEditorScreen(this));
                 }
                 return true;
             }
@@ -451,7 +450,7 @@ public final class LiquidClickGuiScreen extends Screen {
                     float cx = cardXAnims[i].value();
                     if (button == 0 && mx >= cx && mx <= cx + cardW && my >= cardY && my <= cardY + cardH) {
                         if (cats[i] == Category.STREAM) {
-                            if (this.client != null) this.client.setScreen(new WorkspaceModalScreen(this));
+                            if (this.minecraft != null) this.minecraft.setScreen(new WorkspaceModalScreen(this));
                             return true;
                         }
                         selectCategoryWithAnimation(cats[i]);
@@ -466,7 +465,7 @@ public final class LiquidClickGuiScreen extends Screen {
                 float cx = cardXAnims[i].value();
                 if (button == 0 && mx >= cx && mx <= cx + cardW && my >= cardY && my <= cardY + cardH) {
                     if (cats[i] == Category.STREAM) {
-                        if (this.client != null) this.client.setScreen(new WorkspaceModalScreen(this));
+                        if (this.minecraft != null) this.minecraft.setScreen(new WorkspaceModalScreen(this));
                         return true;
                     }
                     selectCategoryWithAnimation(cats[i]);
@@ -478,7 +477,7 @@ public final class LiquidClickGuiScreen extends Screen {
     }
 
     @Override
-    public boolean mouseDragged(Click click, double offsetX, double offsetY) {
+    public boolean mouseDragged(MouseButtonEvent click, double offsetX, double offsetY) {
         double dmx = toDesignX(click.x());
         double dmy = toDesignY(click.y());
         if (draggingScrollbar) {
@@ -500,7 +499,7 @@ public final class LiquidClickGuiScreen extends Screen {
     }
 
     @Override
-    public boolean mouseReleased(Click click) {
+    public boolean mouseReleased(MouseButtonEvent click) {
         draggingScrollbar = false;
         for (GlassSlider slider : activeSliders) {
             slider.mouseReleased();
@@ -519,8 +518,8 @@ public final class LiquidClickGuiScreen extends Screen {
     }
 
     @Override
-    public boolean keyPressed(KeyInput input) {
-        if (input.key() == GLFW.GLFW_KEY_ESCAPE) {
+    public boolean keyPressed(KeyEvent input) {
+        if (input.key() == 256) {
             if (selectedCategory != null) {
                 selectedCategory = null;
                 return true;
@@ -538,7 +537,7 @@ public final class LiquidClickGuiScreen extends Screen {
     }
 
     @Override
-    public boolean shouldPause() {
+    public boolean isPauseScreen() {
         return false;
     }
 }

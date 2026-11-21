@@ -1,6 +1,6 @@
 package dev.ahmed.liquidglass.ui.render;
 
-import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import org.joml.Matrix3x2fStack;
 
 public final class IconRenderer {
@@ -13,13 +13,13 @@ public final class IconRenderer {
 
     private IconRenderer() {}
 
-    public static void drawIcon(DrawContext ctx, Icon icon, float x, float y, float size, int color) {
+    public static void drawIcon(GuiGraphicsExtractor ctx, Icon icon, float x, float y, float size, int color) {
         int alpha = (color >>> 24) & 0xFF;
         int softCol = UIRenderer.withAlpha(color, (int) (alpha * 0.35f));
 
         switch (icon) {
             case BACK -> {
-                Matrix3x2fStack m = ctx.getMatrices();
+                Matrix3x2fStack m = ctx.pose();
                 m.pushMatrix();
                 m.translate(x, y);
                 m.scale(0.5f, 0.5f);
@@ -41,7 +41,7 @@ public final class IconRenderer {
                 UIRenderer.drawRoundedBorder(ctx, x, oy, w, h, 5.5f, 1.0f, color);
 
                 // Smooth Play Triangle in center
-                Matrix3x2fStack m = ctx.getMatrices();
+                Matrix3x2fStack m = ctx.pose();
                 m.pushMatrix();
                 m.translate(x + w * 0.38f, oy + h * 0.26f);
                 m.scale(0.5f, 0.5f);

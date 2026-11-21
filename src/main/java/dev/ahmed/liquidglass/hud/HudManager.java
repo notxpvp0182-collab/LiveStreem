@@ -6,8 +6,8 @@ import dev.ahmed.liquidglass.ui.debug.DebugOverlay;
 import dev.ahmed.liquidglass.ui.render.UIRenderer;
 import dev.ahmed.liquidglass.ui.theme.ThemeManager;
 import dev.ahmed.liquidglass.ui.theme.ThemeTokens;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -28,7 +28,7 @@ public final class HudManager {
 
         elements.add(new HudElement("live_indicator", "Live Indicator", 12, 12, 62, 20, true) {
             @Override
-            protected void renderContent(DrawContext ctx) {
+            protected void renderContent(GuiGraphicsExtractor ctx) {
                 ThemeTokens t = ThemeManager.get().tokens();
                 var snap = StreamManager.get().snapshot();
                 boolean isLive = snap.state() == StreamManager.ConnectionState.LIVE;
@@ -42,7 +42,7 @@ public final class HudManager {
 
         elements.add(new HudElement("live_watching", "Live Watching", 78, 12, 102, 20, true) {
             @Override
-            protected void renderContent(DrawContext ctx) {
+            protected void renderContent(GuiGraphicsExtractor ctx) {
                 var snap = StreamManager.get().snapshot();
                 boolean isLive = snap.state() == StreamManager.ConnectionState.LIVE;
                 float pulse = isLive ? (float) (0.60 + 0.40 * Math.sin(System.currentTimeMillis() / 180.0)) : 0.35f;
@@ -101,7 +101,7 @@ public final class HudManager {
                                             boolean enabled, java.util.function.Supplier<String> textSupplier) {
         return new HudElement(id, name, x, y, w, h, enabled) {
             @Override
-            protected void renderContent(DrawContext ctx) {
+            protected void renderContent(GuiGraphicsExtractor ctx) {
                 UIRenderer.drawText(ctx, textSupplier.get(), x() + 7, y() + (height() - 8) * 0.5f,
                     style().textColor, style().scale, style().smallCaps, false);
             }
@@ -113,10 +113,9 @@ public final class HudManager {
         return String.format(Locale.ROOT, "%.2fM", count / 1_000_000.0);
     }
 
-    public void renderHud(DrawContext ctx) {
-        MinecraftClient mc = MinecraftClient.getInstance();
-        if (mc.options.hudHidden) return;
-        if (mc.currentScreen instanceof HudEditorScreen) {
+    public void renderHud(GuiGraphicsExtractor ctx) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.screen instanceof HudEditorScreen) {
             return;
         }
         long startNs = System.nanoTime();

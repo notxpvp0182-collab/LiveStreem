@@ -4,13 +4,12 @@ import dev.ahmed.liquidglass.config.ConfigManager;
 import dev.ahmed.liquidglass.ui.render.UIRenderer;
 import dev.ahmed.liquidglass.ui.theme.ThemeManager;
 import dev.ahmed.liquidglass.ui.theme.ThemeTokens;
-import net.minecraft.client.gui.Click;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.input.KeyInput;
-import net.minecraft.client.input.CharInput;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.text.Text;
-import org.lwjgl.glfw.GLFW;
+import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.CharacterEvent;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.Component;
 
 import java.util.Locale;
 
@@ -23,12 +22,12 @@ public final class HudEditorScreen extends Screen {
     private float dragOffsetX, dragOffsetY;
 
     public HudEditorScreen(Screen parent) {
-        super(Text.literal("LiveStream HUD Editor"));
+        super(Component.literal("LiveStream HUD Editor"));
         this.parent = parent;
     }
 
     @Override
-    public void render(DrawContext ctx, int mouseX, int mouseY, float deltaTicks) {
+    public void extractRenderState(GuiGraphicsExtractor ctx, int mouseX, int mouseY, float deltaTicks) {
         ThemeTokens t = ThemeManager.get().tokens();
 
         if (dragging && selectedElement != null) {
@@ -91,20 +90,20 @@ public final class HudEditorScreen extends Screen {
         }
     }
 
-    private void drawMiniPill(DrawContext ctx, float x, float y, float w, float h, String text, boolean active, int mx, int my) {
+    private void drawMiniPill(GuiGraphicsExtractor ctx, float x, float y, float w, float h, String text, boolean active, int mx, int my) {
         ThemeTokens t = ThemeManager.get().tokens();
         boolean hover = mx >= x && mx <= x + w && my >= y && my <= y + h;
         int fill = active ? UIRenderer.withAlpha(t.accentPrimary(), 55) : (hover ? t.bgGlassStrong() : t.bgElevated());
         int border = active ? t.borderActive() : (hover ? t.borderActive() : t.borderBase());
         UIRenderer.drawRoundedRect(ctx, x, y, w, h, 3.5f, fill);
         UIRenderer.drawRoundedBorder(ctx, x, y, w, h, 3.5f, 1.0f, border);
-        float tw = this.textRenderer.getWidth(text) * 0.85f;
+        float tw = this.font.width(text) * 0.85f;
         UIRenderer.drawText(ctx, text, x + (w - tw) * 0.5f, y + (h - 7) * 0.5f,
             active ? t.textPrimary() : t.textSecondary(), 0.85f, false, false);
     }
 
     @Override
-    public boolean mouseClicked(Click click, boolean doubled) {
+    public boolean mouseClicked(MouseButtonEvent click, boolean doubled) {
         double mx = click.x();
         double my = click.y();
         int btn = click.button();
@@ -162,7 +161,7 @@ public final class HudEditorScreen extends Screen {
     }
 
     @Override
-    public boolean mouseDragged(Click click, double offsetX, double offsetY) {
+    public boolean mouseDragged(MouseButtonEvent click, double offsetX, double offsetY) {
         if (selectedElement != null && !selectedElement.isLocked()) {
             if (resizing) {
                 selectedElement.resize((float) click.x() - selectedElement.x(), (float) click.y() - selectedElement.y());
@@ -184,7 +183,7 @@ public final class HudEditorScreen extends Screen {
     }
 
     @Override
-    public boolean mouseReleased(Click click) {
+    public boolean mouseReleased(MouseButtonEvent click) {
         dragging = false;
         resizing = false;
         return super.mouseReleased(click);
@@ -201,9 +200,9 @@ public final class HudEditorScreen extends Screen {
     }
 
     @Override
-    public boolean keyPressed(KeyInput input) {
-        if (input.key() == GLFW.GLFW_KEY_ESCAPE) {
-            if (this.client != null) this.client.setScreen(parent);
+    public boolean keyPressed(KeyEvent input) {
+        if (input.key() == 256) {
+            if (this.minecraft != null) this.minecraft.setScreen(parent);
             return true;
         }
         return super.keyPressed(input);
@@ -215,7 +214,7 @@ public final class HudEditorScreen extends Screen {
     }
 
     @Override
-    public boolean shouldPause() {
+    public boolean isPauseScreen() {
         return false;
     }
 }

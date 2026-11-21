@@ -2,7 +2,7 @@ package dev.ahmed.liquidglass.ui.font;
 
 import dev.ahmed.liquidglass.ui.theme.GlassQuality;
 import dev.ahmed.liquidglass.ui.theme.ThemeManager;
-import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import org.joml.Matrix3x2fStack;
 
 import java.io.DataInputStream;
@@ -108,7 +108,7 @@ public final class BengaliFontEngine {
         });
     }
 
-    public static float drawBengaliSegment(DrawContext ctx, String bnSegment, float x, float y, int color, boolean shadow) {
+    public static float drawBengaliSegment(GuiGraphicsExtractor ctx, String bnSegment, float x, float y, int color, boolean shadow) {
         List<AksharGlyph> glyphs = tokenizeToGlyphs(bnSegment);
         if (glyphs.isEmpty()) return 0.0f;
 
@@ -116,7 +116,7 @@ public final class BengaliFontEngine {
         int rgb = color & 0x00FFFFFF;
         boolean highQualityShadow = shadow && ThemeManager.get().quality() != GlassQuality.LOW;
 
-        Matrix3x2fStack m = ctx.getMatrices();
+        Matrix3x2fStack m = ctx.pose();
         m.pushMatrix();
         m.translate(x, y - 1.8f);
         m.scale(HD_SCALE, HD_SCALE);

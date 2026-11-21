@@ -2,7 +2,7 @@ package dev.ahmed.liquidglass.hud;
 
 import dev.ahmed.liquidglass.hud.elements.LiveChatElement;
 import dev.ahmed.liquidglass.ui.render.UIRenderer;
-import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 
 public abstract class HudElement {
     private final String id;
@@ -31,7 +31,7 @@ public abstract class HudElement {
         this.enabled = enabled;
     }
 
-    public final void renderElement(DrawContext ctx, float mouseX, float mouseY, boolean inEditor) {
+    public final void renderElement(GuiGraphicsExtractor ctx, float mouseX, float mouseY, boolean inEditor) {
         if (!enabled && !inEditor) return;
 
         if (style.backgroundEnabled) {
@@ -47,7 +47,7 @@ public abstract class HudElement {
         renderContent(ctx);
     }
 
-    protected abstract void renderContent(DrawContext ctx);
+    protected abstract void renderContent(GuiGraphicsExtractor ctx);
 
     public void resize(float newW, float newH) {
         if (!locked) {

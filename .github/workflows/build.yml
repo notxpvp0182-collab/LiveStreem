@@ -1,4 +1,4 @@
-name: Build Batch 3 (1.21.9 - 1.21.11)
+name: Build Batch 4 (26.1 - 26.3)
 
 on:
   push:
@@ -15,42 +15,56 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - mc: "1.21.9"
-            yarn: "1.21.9+build.1"
-            loader: "0.18.1"
-            fabric: "0.134.0+1.21.9"
-          - mc: "1.21.10"
-            yarn: "1.21.10+build.2"
-            loader: "0.18.1"
-            fabric: "0.138.0+1.21.10"
-          - mc: "1.21.11"
-            yarn: "1.21.11+build.6"
-            loader: "0.18.1"
-            fabric: "0.141.1+1.21.11"
+          - mc: "26.1"
+            loader: "0.19.5"
+            fabric: "0.145.1+26.1"
+          - mc: "26.1.1"
+            loader: "0.19.5"
+            fabric: "0.145.4+26.1.1"
+          - mc: "26.1.2"
+            loader: "0.19.5"
+            fabric: "0.155.3+26.1.2"
+          - mc: "26.2"
+            loader: "0.19.5"
+            fabric: "0.158.0+26.2"
+          - mc: "26.3"
+            loader: "0.20.1"
+            fabric: "0.163.0+26.3"
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up JDK 21
+      - name: Set up JDK 25
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '21'
+          java-version: '25'
 
-      - name: Setup Gradle 9.2.0
+      - name: Setup Gradle 9.6.0
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '9.2.0'
+          gradle-version: '9.6.0'
 
       - name: Configure Version ${{ matrix.mc }} via sed
         run: |
           sed -i "s/^minecraft_version=.*/minecraft_version=${{ matrix.mc }}/" gradle.properties
-          sed -i "s/^yarn_mappings=.*/yarn_mappings=${{ matrix.yarn }}/" gradle.properties
           sed -i "s/^loader_version=.*/loader_version=${{ matrix.loader }}/" gradle.properties
           sed -i "s/^fabric_version=.*/fabric_version=${{ matrix.fabric }}/" gradle.properties
           sed -i "s/^mod_version=.*/mod_version=${{ matrix.mc }}/" gradle.properties
           sed -i 's/"minecraft": "[^"]*"/"minecraft": "${{ matrix.mc }}"/' src/main/resources/fabric.mod.json
+
+          if [[ "${{ matrix.mc }}" == "26.2" || "${{ matrix.mc }}" == "26.3" ]]; then
+            find src/main/java -name "*.java" -exec sed -i \
+              -e 's/client\.screen/client.gui.screen()/g' \
+              -e 's/mc\.screen/mc.gui.screen()/g' \
+              -e 's/\.getInstance()\.screen/.getInstance().gui.screen()/g' \
+              -e 's/client\.setScreen(/client.gui.setScreen(/g' \
+              -e 's/this\.minecraft\.setScreen(/this.minecraft.gui.setScreen(/g' {} +
+          fi
+          if [[ "${{ matrix.mc }}" == "26.3" ]]; then
+            sed -i 's/InputConstants\.Type\.KEYSYM/InputConstants.Type.KEYBOARD/g' src/main/java/dev/ahmed/liquidglass/LiquidGlassClient.java
+          fi
 
       - name: Build Mod for ${{ matrix.mc }}
         run: gradle build --no-daemon
@@ -68,23 +82,20 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Remove Source Code from Release Tags
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Strip All Source Code from Public Branch and Release Tag
         run: |
-          # পুরনো v1.21 রিলিজ ও ট্যাগ ডিলিট করা (যেটাতে সোর্স কোড ছিল)
-          gh release delete v1.21 --yes --cleanup-tag || true
-          # শুধুমাত্র README.md দিয়ে একটি সোর্স-কোডহীন কমিট বানিয়ে রিলিজ ট্যাগে পুশ করা
           cp README.md /tmp/README.md
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git checkout --orphan readme-only-tag
+          git checkout --orphan readme-only
           git rm -rf .
           cp /tmp/README.md README.md
           git add README.md
-          git commit -m "Release README only (No Source Code)"
+          git commit -m "LiveStream Official Release Hub (README Only)"
           git tag -f all-versions
           git push origin refs/tags/all-versions --force
+          git branch -M main
+          git push origin main --force
 
       - name: Download All Built Jars
         uses: actions/download-artifact@v4
@@ -97,6 +108,7 @@ jobs:
         with:
           tag_name: all-versions
           name: "LiveStream Mod (All Versions 1.21 - 26.3)"
+          body_path: README.md
           files: dist/LiveStream-*.jar
           overwrite_files: true
         env:

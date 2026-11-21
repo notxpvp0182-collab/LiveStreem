@@ -9,13 +9,12 @@
   "icon": "assets/liquidglass/icon.png",
   "environment": "client",
   "entrypoints": {
-    "client": ["dev.ahmed.liquidglass.LiquidGlassClient"],
-    "modmenu": ["dev.ahmed.liquidglass.compat.ModMenuIntegration"]
+    "client": ["dev.ahmed.liquidglass.LiquidGlassClient"]
   },
   "depends": {
     "fabricloader": "*",
     "minecraft": "1.21",
-    "java": ">=21",
+    "java": ">=25",
     "fabric-api": "*"
   }
 }

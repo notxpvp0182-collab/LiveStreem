@@ -10,14 +10,13 @@ import dev.ahmed.liquidglass.ui.render.UIRenderer;
 import dev.ahmed.liquidglass.ui.theme.GlassQuality;
 import dev.ahmed.liquidglass.ui.theme.ThemeManager;
 import dev.ahmed.liquidglass.ui.theme.ThemeTokens;
-import net.minecraft.client.gui.Click;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.input.KeyInput;
-import net.minecraft.client.input.CharInput;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.text.Text;
+import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.CharacterEvent;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.Component;
 import org.joml.Matrix3x2fStack;
-import org.lwjgl.glfw.GLFW;
 
 public final class WorkspaceModalScreen extends Screen {
     private static final String[] PROFILES = {"Default", "Streaming", "Gaming", "Minimal"};
@@ -28,7 +27,7 @@ public final class WorkspaceModalScreen extends Screen {
     private long lastFrameNs = System.nanoTime();
 
     public WorkspaceModalScreen(Screen parent) {
-        super(Text.literal("Stream Workspace"));
+        super(Component.literal("Stream Workspace"));
         this.parent = parent;
         ConfigManager cfg = ConfigManager.get();
         String url = StreamManager.get().lastUrl().isEmpty() ? cfg.youtubeUrl() : StreamManager.get().lastUrl();
@@ -44,14 +43,14 @@ public final class WorkspaceModalScreen extends Screen {
     }
 
     @Override
-    public void render(DrawContext ctx, int mouseX, int mouseY, float deltaTicks) {
+    public void extractRenderState(GuiGraphicsExtractor ctx, int mouseX, int mouseY, float deltaTicks) {
         long now = System.nanoTime();
         float dt = Math.min(0.05f, (now - lastFrameNs) / 1_000_000_000.0f);
         lastFrameNs = now;
 
         float progress = openAnim.update(dt);
         if (closing && openAnim.isFinished()) {
-            if (this.client != null) this.client.setScreen(parent);
+            if (this.minecraft != null) this.minecraft.setScreen(parent);
             return;
         }
 
@@ -59,7 +58,7 @@ public final class WorkspaceModalScreen extends Screen {
         ctx.fill(0, 0, this.width, this.height, UIRenderer.withAlpha(t.bgOverlay(), (int) (185 * progress)));
 
         float scale = 0.93f + 0.07f * progress;
-        Matrix3x2fStack matrices = ctx.getMatrices();
+        Matrix3x2fStack matrices = ctx.pose();
         matrices.pushMatrix();
         matrices.translate(this.width * 0.5f, this.height * 0.5f + (1.0f - progress) * 10.0f);
         matrices.scale(scale, scale);
@@ -79,7 +78,7 @@ public final class WorkspaceModalScreen extends Screen {
 
         var snap = StreamManager.get().snapshot();
         String stateText = snap.state().name();
-        int badgeW = this.textRenderer.getWidth(stateText) + 16;
+        int badgeW = this.font.width(stateText) + 16;
         UIRenderer.drawRoundedRect(ctx, mx + modalW - badgeW - 12, my + 10, badgeW, 16, 8.0f, t.bgElevated());
         UIRenderer.drawText(ctx, stateText, mx + modalW - badgeW - 4, my + 14, t.accentPrimary(), 1.0f, false, false);
 
@@ -131,8 +130,8 @@ public final class WorkspaceModalScreen extends Screen {
 
         String status = snap.statusMessage();
         int maxStatusW = (int) fieldW;
-        if (this.textRenderer.getWidth(status) > maxStatusW) {
-            status = this.textRenderer.trimToWidth(status, maxStatusW - 8) + "...";
+        if (this.font.width(status) > maxStatusW) {
+            status = this.font.plainSubstrByWidth(status, maxStatusW - 8) + "...";
         }
         UIRenderer.drawText(ctx, status, mainX + 12, mainY + 100, t.textSecondary(), 1.0f, false, false);
 
@@ -148,16 +147,16 @@ public final class WorkspaceModalScreen extends Screen {
         matrices.popMatrix();
     }
 
-    private void drawButton(DrawContext ctx, float x, float y, float w, float h, String label, int mouseX, int mouseY) {
+    private void drawButton(GuiGraphicsExtractor ctx, float x, float y, float w, float h, String label, int mouseX, int mouseY) {
         ThemeTokens t = ThemeManager.get().tokens();
         boolean hover = mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + h;
         UIRenderer.drawRoundedRect(ctx, x, y, w, h, 7.5f, hover ? t.bgGlassStrong() : t.bgGlassWeak());
         UIRenderer.drawRoundedBorder(ctx, x, y, w, h, 7.5f, 1.0f, hover ? t.borderActive() : t.borderBase());
-        float tw = this.textRenderer.getWidth(label);
+        float tw = this.font.width(label);
         UIRenderer.drawText(ctx, label, x + (w - tw) * 0.5f, y + (h - 8) * 0.5f, t.textPrimary(), 1.0f, false, false);
     }
 
-    private void drawTelemetryCard(DrawContext ctx, float x, float y, float w, float h, String label, String value) {
+    private void drawTelemetryCard(GuiGraphicsExtractor ctx, float x, float y, float w, float h, String label, String value) {
         ThemeTokens t = ThemeManager.get().tokens();
         UIRenderer.drawRoundedRect(ctx, x, y, w, h, 8.0f, t.bgGlassWeak());
         UIRenderer.drawRoundedBorder(ctx, x, y, w, h, 8.0f, 1.0f, t.borderBase());
@@ -166,7 +165,7 @@ public final class WorkspaceModalScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(Click click, boolean doubled) {
+    public boolean mouseClicked(MouseButtonEvent click, boolean doubled) {
         double cx = click.x();
         double cy = click.y();
         int btn = click.button();
@@ -235,21 +234,21 @@ public final class WorkspaceModalScreen extends Screen {
     }
 
     @Override
-    public boolean mouseDragged(Click click, double ox, double oy) {
+    public boolean mouseDragged(MouseButtonEvent click, double ox, double oy) {
         if (streamUrlField.mouseDragged(click.x())) return true;
         return super.mouseDragged(click, ox, oy);
     }
 
     @Override
-    public boolean mouseReleased(Click click) {
+    public boolean mouseReleased(MouseButtonEvent click) {
         streamUrlField.mouseReleased();
         return super.mouseReleased(click);
     }
 
     @Override
-    public boolean keyPressed(KeyInput input) {
+    public boolean keyPressed(KeyEvent input) {
         if (streamUrlField.keyPressed(input)) return true;
-        if (input.key() == GLFW.GLFW_KEY_ESCAPE) {
+        if (input.key() == 256) {
             closeWithAnimation();
             return true;
         }
@@ -257,7 +256,7 @@ public final class WorkspaceModalScreen extends Screen {
     }
 
     @Override
-    public boolean charTyped(CharInput input) {
+    public boolean charTyped(CharacterEvent input) {
         if (streamUrlField.charTyped(input)) return true;
         return super.charTyped(input);
     }
@@ -269,5 +268,5 @@ public final class WorkspaceModalScreen extends Screen {
     }
 
     @Override
-    public boolean shouldPause() { return false; }
+    public boolean isPauseScreen() { return false; }
 }

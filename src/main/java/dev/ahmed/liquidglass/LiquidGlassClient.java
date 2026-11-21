@@ -8,41 +8,40 @@ import dev.ahmed.liquidglass.ui.clickgui.LiquidClickGuiScreen;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements;
-import net.minecraft.client.option.KeyBinding;
-import net.minecraft.client.util.InputUtil;
-import net.minecraft.util.Identifier;
-import org.lwjgl.glfw.GLFW;
+import net.minecraft.client.KeyMapping;
+import com.mojang.blaze3d.platform.InputConstants;
+import net.minecraft.resources.Identifier;
 
 public final class LiquidGlassClient implements ClientModInitializer {
     public static final String MOD_ID = "liquidglass";
-    private static KeyBinding openGuiKey;
-    private static KeyBinding chatUpKey;
-    private static KeyBinding chatDownKey;
+    private static KeyMapping openGuiKey;
+    private static KeyMapping chatUpKey;
+    private static KeyMapping chatDownKey;
     private static int upHoldTicks = 0;
     private static int downHoldTicks = 0;
 
     @Override
     public void onInitializeClient() {
-        KeyBinding.Category category = KeyBinding.Category.create(Identifier.of(MOD_ID, "general"));
-        openGuiKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+        KeyMapping.Category category = KeyMapping.Category.register(Identifier.fromNamespaceAndPath(MOD_ID, "general"));
+        openGuiKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
             "key.liquidglass.open_gui",
-            InputUtil.Type.KEYSYM,
-            GLFW.GLFW_KEY_RIGHT_SHIFT,
+            InputConstants.Type.KEYSYM,
+            344,
             category
         ));
-        chatUpKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+        chatUpKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
             "key.liquidglass.chat_up",
-            InputUtil.Type.KEYSYM,
-            GLFW.GLFW_KEY_UP,
+            InputConstants.Type.KEYSYM,
+            265,
             category
         ));
-        chatDownKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+        chatDownKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
             "key.liquidglass.chat_down",
-            InputUtil.Type.KEYSYM,
-            GLFW.GLFW_KEY_DOWN,
+            InputConstants.Type.KEYSYM,
+            264,
             category
         ));
 
@@ -55,18 +54,15 @@ public final class LiquidGlassClient implements ClientModInitializer {
         }
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            while (openGuiKey.wasPressed()) {
-                if (client.currentScreen == null) {
+            while (openGuiKey.consumeClick()) {
+                if (client.screen == null) {
                     client.setScreen(new LiquidClickGuiScreen());
                 }
             }
 
-            if (HudManager.get().isLiveChatEnabled() && client.getWindow() != null) {
-                long handle = client.getWindow().getHandle();
-                boolean upPressed = chatUpKey.isPressed()
-                    || (client.currentScreen == null && GLFW.glfwGetKey(handle, GLFW.GLFW_KEY_UP) == GLFW.GLFW_PRESS);
-                boolean downPressed = chatDownKey.isPressed()
-                    || (client.currentScreen == null && GLFW.glfwGetKey(handle, GLFW.GLFW_KEY_DOWN) == GLFW.GLFW_PRESS);
+            if (HudManager.get().isLiveChatEnabled()) {
+                boolean upPressed = chatUpKey.isDown();
+                boolean downPressed = chatDownKey.isDown();
 
                 if (upPressed) {
                     upHoldTicks++;
@@ -95,7 +91,7 @@ public final class LiquidGlassClient implements ClientModInitializer {
             }
         });
 
-        HudElementRegistry.attachElementAfter(VanillaHudElements.MISC_OVERLAYS, Identifier.of(MOD_ID, "overlay"),
+        HudElementRegistry.attachElementAfter(VanillaHudElements.MISC_OVERLAYS, Identifier.fromNamespaceAndPath(MOD_ID, "overlay"),
             (drawContext, tickCounter) -> HudManager.get().renderHud(drawContext)
         );
 

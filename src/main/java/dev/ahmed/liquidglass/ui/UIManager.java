@@ -4,8 +4,8 @@ import dev.ahmed.liquidglass.ui.animation.Animation;
 import dev.ahmed.liquidglass.ui.render.UIRenderer;
 import dev.ahmed.liquidglass.ui.theme.ThemeManager;
 import dev.ahmed.liquidglass.ui.theme.ThemeTokens;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -19,7 +19,7 @@ public final class UIManager {
     }
 
     private static final UIManager INSTANCE = new UIManager();
-    private final Map<Layer, List<Consumer<DrawContext>>> layerTasks = new EnumMap<>(Layer.class);
+    private final Map<Layer, List<Consumer<GuiGraphicsExtractor>>> layerTasks = new EnumMap<>(Layer.class);
 
     private String pendingTooltip = null;
     private float tooltipX, tooltipY;
@@ -33,7 +33,7 @@ public final class UIManager {
 
     public static UIManager get() { return INSTANCE; }
 
-    public void enqueue(Layer layer, Consumer<DrawContext> renderTask) {
+    public void enqueue(Layer layer, Consumer<GuiGraphicsExtractor> renderTask) {
         layerTasks.get(layer).add(renderTask);
     }
 
@@ -43,7 +43,7 @@ public final class UIManager {
         this.tooltipY = mouseY - 6;
     }
 
-    public void flushLayers(DrawContext ctx, float dt) {
+    public void flushLayers(GuiGraphicsExtractor ctx, float dt) {
         tooltipFade.animateTo(pendingTooltip != null ? 1.0f : 0.0f);
         float tf = tooltipFade.update(dt);
 
@@ -54,17 +54,17 @@ public final class UIManager {
         pendingTooltip = null;
 
         for (Layer layer : Layer.values()) {
-            List<Consumer<DrawContext>> tasks = layerTasks.get(layer);
-            for (Consumer<DrawContext> task : tasks) {
+            List<Consumer<GuiGraphicsExtractor>> tasks = layerTasks.get(layer);
+            for (Consumer<GuiGraphicsExtractor> task : tasks) {
                 task.accept(ctx);
             }
             tasks.clear();
         }
     }
 
-    private void renderGlassTooltip(DrawContext ctx, String text, float x, float y, float alphaProgress) {
+    private void renderGlassTooltip(GuiGraphicsExtractor ctx, String text, float x, float y, float alphaProgress) {
         ThemeTokens t = ThemeManager.get().tokens();
-        int tw = MinecraftClient.getInstance().textRenderer.getWidth(text);
+        int tw = Minecraft.getInstance().font.width(text);
         float w = tw + 14.0f;
         float h = 18.0f;
         int alpha = Math.round(240 * alphaProgress);
